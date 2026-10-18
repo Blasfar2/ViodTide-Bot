@@ -158,9 +158,11 @@ test('auto-rule publishes exact rules and one working Agree panel after auto-fix
   await autoRule.execute(rulesRequest(f, true), { rulesService: f.rulesService, management: f.management });
   state = await f.rulesService.store.get(f.guild.id); const message = channel.messages.cache.get(state.rulesMessageId);
   const body = channel.messages.cache.get(state.rulesSequence.body);
-  assert.equal(body.embeds[0].description, RULES_MAIN_TEXT);
-  assert.equal(message.embeds[0].description, RULES_AGREEMENT_TEXT);
-  assert.equal(`${body.embeds[0].description}\n${message.embeds[0].description}`, RULES_TEXT);
+  const plainText = (text) => text.replaceAll('*', '').replace(/\n{2,}/g, '\n');
+  const bodyText = plainText(body.embeds[0].description);
+  assert.equal(bodyText, RULES_MAIN_TEXT);
+  assert.equal(plainText(message.embeds[0].description), RULES_AGREEMENT_TEXT);
+  assert.equal(`${bodyText}\n${plainText(message.embeds[0].description)}`, RULES_TEXT);
   assert.equal(message.components[0].components[0].customId, RULES_AGREE_BUTTON_ID);
   assert.equal(channel.permissionsFor(f.ordinary).has(P.ViewChannel), true);
   const config = configFor(f.store, f.guild.id);

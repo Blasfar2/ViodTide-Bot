@@ -26,12 +26,21 @@ async function assetFixture(t, fetchImpl = async () => new globalThis.Response(p
   return new RulesLogo({ directory, fetchImpl });
 }
 
+function plainText(message) {
+  return message.embeds[0].description.replaceAll('*', '').replace(/\n{2,}/g, '\n');
+}
+
 test('three public messages preserve every approved character with only one styled Agree button', async (t) => {
   const f = await fixture(t); const { state, channel } = await split(f);
   const posts = [...channel.messages.cache.values()];
   assert.equal(posts.length, 3);
   assert.match(posts[0].embeds[0].image.url, /^https:\/\/cdn\.discordapp\.com\//);
-  assert.equal(`${posts[1].embeds[0].description}\n${posts[2].embeds[0].description}`, RULES_TEXT);
+  assert.equal(`${plainText(posts[1])}\n${plainText(posts[2])}`, RULES_TEXT);
+  assert.equal(posts[1].embeds.length, 1);
+  assert.equal([...posts[1].embeds[0].description.matchAll(/^\*\*\d{2} \| .+\*\*$/gm)].length, 10);
+  assert.match(posts[1].embeds[0].description, /\n\n\*\*01 \| 🤝 Respect Everyone\*\*\nTreat every member/);
+  assert.match(posts[2].embeds[0].description, /\n\n\*\*✅ By participating/);
+  assert.ok(posts[1].embeds[0].description.length <= 4096);
   assert.deepEqual(posts.map((p) => p.components.length), [0, 0, 1]);
   assert.equal(posts[2].components[0].components[0].style, ButtonStyle.Success);
   assert.equal(posts[2].components[0].components[0].custom_id, RULES_AGREE_BUTTON_ID);
@@ -80,7 +89,7 @@ test('deleted middle post is repaired in chronological order without duplicate r
   channel.messages.cache.delete(state.rulesSequence.body);
   const updated = await split(f); const posts = [...channel.messages.cache.values()];
   assert.equal(posts.length, 3);
-  assert.equal(`${posts[1].embeds[0].description}\n${posts[2].embeds[0].description}`, RULES_TEXT);
+  assert.equal(`${plainText(posts[1])}\n${plainText(posts[2])}`, RULES_TEXT);
   assert.deepEqual(posts.map((p) => p.components.length), [0, 0, 1]);
   assert.notEqual(updated.state.rulesMessageId, state.rulesMessageId);
   await assert.rejects(f.rulesService.verify({ guild: f.guild, channelId: channel.id, message: { id: state.rulesMessageId } }), /inactive/);
