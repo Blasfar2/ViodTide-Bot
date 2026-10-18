@@ -140,17 +140,16 @@ test('normal-role and member ViewChannel allows block verification bypasses with
   }
 });
 
-test('administrator, verified, and bot role/member allows are intentional exemptions', async () => {
+test('administrator roles, Verified, the owner, and bots are intentional exemptions', async () => {
   const { guild, addChannel, options } = fixture();
   guild.roles.cache.set('admin', { permissions: new PermissionsBitField(Administrator) });
   guild.roles.cache.set('bot-role', { permissions: new PermissionsBitField(), tags: { botId: 'other-bot' } });
-  guild.members.cache.set('admin-member', { permissions: new PermissionsBitField(Administrator), user: { bot: false } });
   guild.members.cache.set('other-bot', { permissions: new PermissionsBitField(), user: { bot: true } });
   const channel = addChannel('general', { overwrites: [
     overwrite('admin', { allow: [ViewChannel] }),
     overwrite('bot-role', { allow: [ViewChannel] }),
     overwrite(verifiedId, { allow: [ViewChannel] }),
-    ...[botId, 'owner', 'admin-member', 'other-bot'].map((id) => overwrite(id, {
+    ...[botId, 'owner', 'other-bot'].map((id) => overwrite(id, {
       allow: [ViewChannel], type: OverwriteType.Member,
     })),
   ] });
@@ -162,6 +161,19 @@ test('a managed role for an integration is not treated as a bot exemption', asyn
   guild.roles.cache.set('integration', { permissions: new PermissionsBitField(), managed: true });
   addChannel('general', { overwrites: [overwrite('integration', { allow: [ViewChannel] })] });
   await assert.rejects(buildPermissionPlan(guild, options), /would bypass verification/);
+});
+
+test('cached administrator status cannot authorize a member visibility bypass', async () => {
+  const { guild, calls, addChannel, options } = fixture();
+  // No Guild Members intent is enabled, so an old member role snapshot may be stale.
+  guild.members.cache.set('former-admin', {
+    permissions: new PermissionsBitField(Administrator), user: { bot: false },
+  });
+  addChannel('general', { overwrites: [overwrite('former-admin', {
+    allow: [ViewChannel], type: OverwriteType.Member,
+  })] });
+  await assert.rejects(buildPermissionPlan(guild, options), /would bypass verification/);
+  assert.deepEqual(calls, []);
 });
 
 test('private staff channel overwrites remain untouched even with staff-role visibility', async () => {

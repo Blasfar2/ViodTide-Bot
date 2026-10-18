@@ -19,7 +19,7 @@ export function readConfig(environment = process.env) {
 
   for (const name of ['DISCORD_CLIENT_ID', 'DISCORD_GUILD_ID']) {
     const value = environment[name].trim();
-    if (!/^\d{17,20}$/.test(value) || BigInt(value) > 18446744073709551615n) {
+    if (!/^[1-9]\d{16,19}$/.test(value) || BigInt(value) > 18446744073709551615n) {
       throw new ConfigError(`${name} must be a Discord ID copied with Developer Mode enabled.`);
     }
   }

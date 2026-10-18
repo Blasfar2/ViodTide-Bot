@@ -21,7 +21,10 @@ function intentionalBypass(guild, overwrite, botMember) {
   if (overwrite.type === OverwriteType.Member) {
     if (overwrite.id === botMember.id || overwrite.id === guild.ownerId) return true;
     const member = guild.members.cache.get(overwrite.id);
-    return Boolean(member?.permissions.has(Administrator) || member?.user?.bot);
+    // Guild Members is deliberately not enabled. Cached human role assignments
+    // may be stale; only immutable bot identity is safe to use here. Current
+    // administrators already bypass overwrites and do not need a member grant.
+    return Boolean(member?.user?.bot);
   }
   return false;
 }
