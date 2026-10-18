@@ -8,7 +8,7 @@ import { Attachment, ButtonStyle, PermissionFlagsBits as P } from 'discord.js';
 import { RULES_TEXT } from '../src/config/rules-text.js';
 import { RulesLogo } from '../src/services/rules-logo.js';
 import { RulesService } from '../src/services/rules-service.js';
-import { RULES_FOOTER, RULES_AGREE_BUTTON_ID, RULES_DISAGREE_BUTTON_ID, rulesPartPayload } from '../src/services/rules-payload.js';
+import { RULES_FOOTER, RULES_AGREE_BUTTON_ID, rulesPartPayload } from '../src/services/rules-payload.js';
 import { fixture } from './helpers/community-fixture.js';
 import { autoRule } from '../src/commands/auto-rule.js';
 
@@ -44,38 +44,33 @@ test('three public messages preserve approved text with styled choices only on t
   assert.deepEqual(posts.map((p) => p.components.length), [0, 0, 1]);
   assert.equal(posts[2].components[0].components[0].style, ButtonStyle.Success);
   assert.equal(posts[2].components[0].components[0].custom_id, RULES_AGREE_BUTTON_ID);
-  assert.equal(posts[2].components[0].components[1].style, ButtonStyle.Danger);
-  assert.equal(posts[2].components[0].components[1].custom_id, RULES_DISAGREE_BUTTON_ID);
+  assert.equal(posts[2].components[0].components.length, 1);
   assert.equal(posts[2].embeds[0].color, 0x22c55e);
   assert.equal(posts[2].embeds[0].footer.text, RULES_FOOTER);
   assert.equal(state.rulesMessageId, posts[2].id);
   assert.deepEqual(Object.values(state.rulesSequence), posts.map((p) => p.id));
 });
 
-test('Disagree keeps newcomers unverified and permits a later Agree on the current panel', async (t) => {
-  const f = await fixture(t); const general = f.addChannel('general');
-  const { state, channel } = await split(f);
-  const click = { guild: f.guild, user: f.ordinary.user, channelId: channel.id, message: { id: state.rulesMessageId } };
-  f.calls.length = 0;
-  await assert.rejects(f.rulesService.disagree({ ...click, message: { id: 'copied-panel' } }), /inactive/);
-  assert.match(await f.rulesService.disagree(click), /remain unverified/);
-  assert.match(await f.rulesService.disagree(click), /remain unverified/);
-  assert.equal(f.ordinary.roles.cache.has(state.verifiedRoleId), false);
-  assert.equal(general.permissionsFor(f.ordinary).has(P.ViewChannel), false);
-  assert.deepEqual(f.calls, []);
-  await f.rulesService.verify(click);
-  assert.equal(f.ordinary.roles.cache.has(state.verifiedRoleId), true);
-  assert.equal(general.permissionsFor(f.ordinary).has(P.ViewChannel), true);
+test('refreshing an old two-choice message removes Disagree and retains the active Agree ID', async (t) => {
+  const f = await fixture(t); const { state, channel } = await split(f);
+  const message = channel.messages.cache.get(state.rulesMessageId);
+  message.components[0].components.push({ customId: 'voidtide:rules:disagree:v1', label: 'I Disagree', style: ButtonStyle.Danger });
+  const updated = await split(f);
+  assert.equal(updated.state.rulesMessageId, state.rulesMessageId);
+  assert.equal(message.components[0].components.length, 1);
+  assert.equal(message.components[0].components[0].custom_id, RULES_AGREE_BUTTON_ID);
 });
 
-test('already verified members can decline without automatic role removal or punishment', async (t) => {
-  const f = await fixture(t); const { state, channel } = await split(f);
-  await f.ordinary.roles.add(state.verifiedRoleId); f.calls.length = 0;
-  const content = await f.rulesService.disagree({ guild: f.guild, user: f.ordinary.user, channelId: channel.id, message: { id: state.rulesMessageId } });
-  assert.match(content, /already have Verified/);
-  assert.match(content, /contact staff privately/);
-  assert.equal(f.ordinary.roles.cache.has(state.verifiedRoleId), true);
-  assert.deepEqual(f.calls, []);
+test('permission-preserving rules refresh keeps all existing gates and channel overwrites', async (t) => {
+  const f = await fixture(t); f.addChannel('general'); await split(f);
+  const previous = await f.rulesService.store.get(f.guild.id);
+  await f.rulesService.store.set(f.guild.id, { preserveChannelPermissions: true });
+  f.calls.length = 0;
+  await split(f);
+  const updated = await f.rulesService.store.get(f.guild.id);
+  assert.deepEqual(updated.gatedChannelIds, previous.gatedChannelIds);
+  assert.equal(f.calls.some(([kind]) => kind === 'overwrite'), false);
+  assert.equal(f.calls.some(([kind]) => kind === 'parent'), false);
 });
 
 test('legacy rules migrate into three messages without deleting old posts or unrelated conversation', async (t) => {

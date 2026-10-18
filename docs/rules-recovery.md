@@ -4,6 +4,8 @@ Use this procedure only as a server administrator/operator. Stop the bot and bac
 
 The three-message layout stores `rulesSequence` IDs (logo, body, agreement), `rulesLayout`, and an optional `rulesLogo` file reference in `rules.json`. `rulesMessageId` remains the final Agree message ID. Preserve `data/rules-assets/` with both databases. A missing/corrupt local logo can be restored from backup or uploaded again during `/auto-rule logo:` preview. Missing sequence messages are repaired in chronological order on a fresh preview/confirmation; only bot-owned rules messages are edited and unrelated messages are kept. Verification requires a running bot, as explained in [offline rules](offline-rules.md).
 
+Simple `/setup-server` stores `preserveChannelPermissions:true`. Later rules refreshes keep that policy and retain the saved `gatedChannelIds`; they never edit existing channel overwrites. Recovery of old gates remains a manual staff task. Do not clear saved gates or this flag to force a layout update.
+
 ## Renamed rules channel or role
 
 The standalone legacy rules service requires its saved rules channel and role to retain the expected names `📜・rules` and `Verified`. Restore those names, then preview `/setup-server` or `/setup-rules` again. No replacement is created just because a saved resource was renamed.

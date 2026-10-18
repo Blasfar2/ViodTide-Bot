@@ -6,7 +6,7 @@ import { setupRules } from '../src/commands/setup-rules.js';
 import { RULES_TEXT } from '../src/config/rules-text.js';
 import { handleInteraction } from '../src/events/interaction-create.js';
 import { RulesError } from '../src/services/rules-errors.js';
-import { RULES_AGREE_BUTTON_ID, RULES_DISAGREE_BUTTON_ID, rulesPayload } from '../src/services/rules-payload.js';
+import { RULES_AGREE_BUTTON_ID, rulesPayload } from '../src/services/rules-payload.js';
 
 const approvedRules = `🌌 VOIDTIDE | COMMUNITY RULES
 Welcome to VOIDTIDE! 🌊
@@ -73,19 +73,15 @@ test('approved rules retain every character and fit Discord embed limits', () =>
   }
 });
 
-test('verification panel has stable Agree and Disagree buttons and ordinary rules reads have none', () => {
+test('verification panel has only Agree and ordinary rules reads have no buttons', () => {
   const payload = rulesPayload({ verification: true });
   assert.equal(payload.components.length, 1);
   const row = payload.components[0].toJSON();
-  assert.equal(row.components.length, 2);
+  assert.equal(row.components.length, 1);
   assert.equal(row.components[0].custom_id, RULES_AGREE_BUTTON_ID);
   assert.equal(row.components[0].label, 'I Agree');
   assert.equal(row.components[0].emoji.name, '✅');
   assert.equal(row.components[0].style, ButtonStyle.Success);
-  assert.equal(row.components[1].custom_id, RULES_DISAGREE_BUTTON_ID);
-  assert.equal(row.components[1].label, 'I Disagree');
-  assert.equal(row.components[1].emoji.name, '❌');
-  assert.equal(row.components[1].style, ButtonStyle.Danger);
   assert.deepEqual(rulesPayload().components, []);
 });
 
@@ -184,23 +180,19 @@ test('verification outside the configured guild never reaches the service', asyn
   }
 });
 
-test('Disagree is acknowledged privately and never verifies or removes the Newcomer role', async () => {
-  const request = interaction({ isButton: () => true, isChatInputCommand: () => false, customId: RULES_DISAGREE_BUTTON_ID });
-  let declined = 0;
+test('retired Disagree buttons receive private guidance without verification or role changes', async () => {
+  const request = interaction({ isButton: () => true, isChatInputCommand: () => false, customId: 'voidtide:rules:disagree:v1' });
   await handleInteraction(request, {
     commands: new Map(), guildId: 'guild', logger: { error: () => assert.fail('unexpected error') },
     rulesService: {
       verify() { assert.fail('Disagree must not verify'); },
-      async disagree(received) { assert.equal(received.deferred, true); declined++; return 'You remain unverified.'; },
     },
     management: { afterVerify() { assert.fail('Disagree must not clean up newcomer roles'); } },
   });
-  assert.equal(declined, 1);
-  assert.deepEqual(request.calls, [
-    ['defer', { flags: MessageFlags.Ephemeral }],
-    ['edit', { content: 'You remain unverified.', allowedMentions: { parse: [] } }],
-  ]);
-  const foreign = interaction({ isButton: () => true, isChatInputCommand: () => false, customId: RULES_DISAGREE_BUTTON_ID, guildId: 'another-guild' });
+  assert.equal(request.calls[0][0], 'reply');
+  assert.equal(request.calls[0][1].flags, MessageFlags.Ephemeral);
+  assert.match(request.calls[0][1].content, /Disagree was removed/);
+  const foreign = interaction({ isButton: () => true, isChatInputCommand: () => false, customId: 'voidtide:rules:disagree:v1', guildId: 'another-guild' });
   await handleInteraction(foreign, { commands: new Map(), guildId: 'guild', logger: { error: () => assert.fail('unexpected error') },
     rulesService: { disagree() { assert.fail('Foreign guild must not reach rules service'); } } });
   assert.equal(foreign.calls[0][1].flags, MessageFlags.Ephemeral);

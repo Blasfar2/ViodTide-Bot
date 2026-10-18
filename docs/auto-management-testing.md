@@ -1,27 +1,26 @@
-# Auto-fix and auto-rule acceptance checklist
+# Simple gaming/streaming setup acceptance checklist
 
-Use a test server and a backup of `data/`. Enable the required intents and place the bot above its managed member roles. Stop other bot copies.
+Use a test server, a backup of all `data/`, and separate administrator/member accounts. Automated tests mock Discord and do not establish live API behavior.
 
-- [ ] After deploying commands, `/auto-fix` and `/auto-rule` appear only for administrators. Ordinary members cannot invoke either through customized command visibility.
-- [ ] `/auto-fix` preview creates no Discord resources and changes no permissions; read every action and ID in its private JSON attachment.
-- [ ] A text channel named `gaming` remains while the missing GAMING category is created on confirmation.
-- [ ] A voice channel named `general` is renamed to an archive name, retains its data, and a correct general text channel is created.
-- [ ] Duplicates are archived; the saved compatible ID is preferred, otherwise the oldest compatible channel is chosen.
-- [ ] A renamed saved general channel is restored and moved into COMMUNITY. Its own overwrites remain unchanged.
-- [ ] STAFF resources become private to ordinary/Verified members and accessible to the intended staff roles; inspect the listed synced category children too.
-- [ ] Confirming without a preview, after changing deletion options, after changing a role/channel, as a different administrator, after ten minutes, or after restart fails before repair.
-- [ ] Without `delete_conflicts:true`, no channel/category is deleted.
-- [ ] In a disposable test only, preview `delete_conflicts:true`: verify the exact duplicate IDs, then confirm with the same option. Only listed DELETE targets disappear, including their history. Referenced/system resources and categories with children are archived instead.
-- [ ] A Discord permission error stops repair; completed IDs and audit entries survive restart. A fresh preview repairs remaining work without duplicate creates.
-- [ ] `/auto-rule logo:` accepts your PNG/JPEG/WebP attachment during preview. Confirmation without reattaching it posts three separate bot messages: logo, welcome/rules 01–10, then violations/agreement and a green ✅ I Agree button. The text uses bold headings, readable paragraph spacing and an emphasized agreement. Removing presentation Markdown and extra blank lines from both descriptions yields the approved text exactly.
-- [ ] An unverified test member can read rules/welcome and cannot see the gated general channel; clicking Agree assigns Verified and unlocks general, while staff and private tickets stay hidden.
-- [ ] The final message also has a red ❌ I Disagree button. It replies privately, leaves a newcomer unverified and restricted, and lets them choose Agree later. Copied/old panels are rejected.
-- [ ] Disagree never kicks, bans or changes roles. An already verified member is directed to staff, keeping their role until a staff-reviewed change.
-- [ ] Repeated `/auto-rule` preview/confirm edits the existing three messages without duplicates; repeating Agree reports already verified. Migration from the old single panel keeps one ordered sequence.
-- [ ] Delete a middle rules post in the test server, then rerun preview/confirm. The bot restores three correctly ordered posts and only the last has an active button.
-- [ ] Restart and rerun `/auto-rule` without a logo option. It reuses `data/rules-assets/`, with no external image host and no repeated logo download.
-- [ ] Stop the bot: messages and logo remain readable, while the custom button cannot assign Verified. Restart to restore button handling. Native Rules Screening is a separate optional system described in `docs/offline-rules.md`.
-- [ ] Ordinary members can still read `/rules` at any time; approved text is unchanged.
-- [ ] Missing Manage Roles or an unsafe/elevated Verified role prevents verification safely.
+- [ ] Deploy updated commands. `/setup-server` and compatibility `/auto-fix` expose `confirm` only, with Administrator defaults and runtime checks. Old deletion/member-assignment options are rejected.
+- [ ] Preview makes no resource, permission, member-role or persistent configuration changes. Read every proposed create, rename and move in the private JSON attachment.
+- [ ] Confirmation without a matching preview, with another account/command, after role/channel/settings changes, after ten minutes or after restart is rejected.
+- [ ] Fresh setup creates exactly the requested six categories, thirteen text channels and three voice rooms, with no welcome/goodbye channels or staff roles.
+- [ ] Confirmed setup does not call permission-overwrite edits on existing channels. Compare every old overwrite, including channels moved with `lockPermissions:false`.
+- [ ] Existing channel histories and unrelated channels stay intact; no channel is deleted. Repeated setup/restart produces no duplicate resources or panels.
+- [ ] An existing wrong type, ambiguous duplicate, unsafe self-selectable role or public staff area fails for manual staff review, without automatic deletion or permission changes.
+- [ ] New staff resources are private to the bot and roles already holding staff permissions. No role grants privileged access to a new member automatically.
+- [ ] 🎭・choose-roles is publicly readable. An ordinary member without Verified can toggle Gamer, Live Notification, Video Notification, Sign Language and Events on/off using the exact five emoji buttons.
+- [ ] Completing Discord's membership screening is required before any role toggle. Elevating a selectable role, giving it channel grants or moving it above the bot makes toggles fail safely.
+- [ ] Stale/copied role panels and invented privileged-role IDs are refused. Losing Manage Roles produces safe guidance without a role change.
+- [ ] If the legacy role channel was private, it remains unchanged; the new named public channel is used and the old bot panel is retired. Repeating setup still creates only one current public panel.
+- [ ] No member is assigned Founder, Co-Founder, Moderator, Administrator or Manage Roles by setup. Existing privileged role permissions and memberships are unchanged.
+- [ ] Existing XP, reward roles, warnings, tickets, scheduled jobs, provider checkpoints and private log destinations survive migration.
+- [ ] Open tickets remain accessible to their requester/staff and hidden from others; new tickets work after support-category reorganization. Closing archives rather than deleting messages.
+- [ ] Rules retain their approved wording and logo. Existing Verified gates remain unchanged, and later `/auto-rule` refreshes do not edit overwrites after simple setup.
+- [ ] The final rules message has only green ✅ I Agree. Previously posted red buttons are removed when setup refreshes the current saved panel; clicking any stale red copy gives private retirement guidance.
+- [ ] `/auto-rule logo:` accepts PNG/JPEG/WebP, including Discord ephemeral attachments. Preview/confirm uploads the original logo as the bot, then publishes the rules and agreement in order. Restart/update reuses `data/rules-assets/`.
+- [ ] Repeated Agree is idempotent. Bots, screening-pending members, elevated/deleted Verified roles and outdated panels are rejected safely.
+- [ ] Stop the bot: rules remain readable, while button actions stop. Restart restores handling; see [offline rules](offline-rules.md).
 
-Automated coverage is in `tests/auto-management.test.js`, plus the existing setup/rules suites. Discord-specific permission propagation, actual gateway login, and real API failures require the manual checks above.
+Primary regressions: `tests/auto-management.test.js`, `tests/community-management.test.js`, `tests/community-recovery.test.js`, `tests/rules-sequence.test.js`, and the rules/foundation suites.

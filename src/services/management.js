@@ -8,7 +8,7 @@ import { ServerSetup } from './server-setup.js';
 import { AutoFix } from './auto-fix.js';
 import { StreamService } from './stream-service.js';
 import { TicketService } from './ticket-service.js';
-import { STAFF_ROLES } from '../config/server-layout.js';
+import { staffRoleIds } from '../config/server-layout.js';
 import { configFor, embed, requirePermission, requireStaff, safeRole, sendOnce, textChannel, UserError } from './management-utils.js';
 
 export class Management {
@@ -22,7 +22,6 @@ export class Management {
     this.streams = new StreamService({ ...shared, environment, fetchImpl });
     this.setup = new ServerSetup({ ...shared, panels: async (guild, config) => {
       await this.tickets.panel(guild, config); await this.community.rolePanel(guild, config);
-      await sendOnce(store, await textChannel(guild, config.channels['level-rewards']), 'panel:level-rewards', await this.community.levelRewards({ guildId: guild.id }), { edit: true });
     } });
     this.autoFix = new AutoFix({ ...shared, setup: this.setup });
     this.running = false;
@@ -43,7 +42,7 @@ export class Management {
     const verifiedRole = roles.get(config.roles?.Verified);
     if (channel.permissionsFor(guild.roles.everyone).has(P.ViewChannel)
       || (verifiedRole && channel.permissionsFor(verifiedRole).has(P.ViewChannel))) throw new UserError('The log channel is not private. No confidential log was posted.');
-    const staff = STAFF_ROLES.map((name) => config.roles?.[name]);
+    const staff = staffRoleIds(roles, guild.id);
     for (const overwrite of channel.permissionOverwrites.cache.values()) {
       if (overwrite.allow.has(P.ViewChannel, false) && ![guild.client.user.id, guild.ownerId, ...staff].includes(overwrite.id)
         && !roles.get(overwrite.id)?.permissions.has(P.Administrator)) throw new UserError('The log channel has an unrelated access grant. Staff must review it.');

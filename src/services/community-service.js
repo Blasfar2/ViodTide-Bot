@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
-import { configFor, embed, futureTime, httpsURL, requirePermission, requireStaff, safeRole, sendOnce, textChannel, UserError, verified } from './management-utils.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits as P } from 'discord.js';
+import { configFor, embed, futureTime, httpsURL, requirePermission, requireStaff, safeRole, sendOnce, textChannel, UserError } from './management-utils.js';
+import { SELF_ROLES } from '../config/server-layout.js';
 
 export const levelFor = (xp) => Math.floor(Math.sqrt(Math.max(0, xp) / 100));
 export function eligibleXP(message, previous, now) {
@@ -122,22 +123,40 @@ export class CommunityService {
     return { embeds: [embed('VOIDTIDE • Level Rewards', [5, 10, 20, 30, 50].map((n) => `Level **${n}** — ${config.roles?.[`Level ${n}`] ? `<@&${config.roles[`Level ${n}`]}>` : 'not configured'}`).join('\n'))] };
   }
   async rolePanel(guild, config) {
-    return sendOnce(this.store, await textChannel(guild, config.channels['choose-roles']), 'panel:roles', {
-      embeds: [embed('Choose your VOIDTIDE roles', 'Toggle Streamer or VIP. These roles have no server privileges or channel permission grants.')],
-      components: [new ActionRowBuilder().addComponents(['Streamer', 'VIP'].map((name) => new ButtonBuilder().setCustomId(`voidtide:role:${name}`).setLabel(name).setStyle(ButtonStyle.Secondary)))],
+    const me = await guild.members.fetchMe({ force: true });
+    if (!me.permissions.has(P.ManageRoles)) throw new UserError('The bot needs Manage Roles for the role panel.');
+    const channel = await textChannel(guild, config.channels['choose-roles']);
+    if (!channel.permissionsFor(guild.roles.everyone)?.has([P.ViewChannel, P.ReadMessageHistory])) throw new UserError('The role panel must be public. Run /setup-server to preview the new public role channel; existing permissions are never changed automatically.');
+    for (const role of SELF_ROLES) await safeRole(guild, config.roles[role.name]);
+    const legacy = this.store.get(guild.id, 'deliveries', 'panel:roles');
+    if (!this.store.get(guild.id, 'deliveries', 'panel:roles:v2') && legacy?.channelId === channel.id) this.store.set(guild.id, 'deliveries', 'panel:roles:v2', legacy);
+    const panel = await sendOnce(this.store, channel, 'panel:roles:v2', {
+      embeds: [embed('🎭 Choose Your VOIDTIDE Roles', '**Make VOIDTIDE yours.**\n\n🎮 **Gamer** — gaming interests\n🔴 **Live Notification** — live-stream alerts\n🎬 **Video Notification** — new videos and clips\n🤟 **Sign Language** — communication preference\n🏆 **Events** — community events\n\nClick to add a role. Click again to remove it. These roles grant no privileges or private-channel access. Staff manage channel access and privileged roles.')],
+      components: [new ActionRowBuilder().addComponents(SELF_ROLES.map((role) => new ButtonBuilder().setCustomId(`voidtide:role:${role.key}`).setLabel(role.name).setEmoji(role.emoji).setStyle(ButtonStyle.Secondary)))],
     }, { edit: true });
+    if (legacy?.messageId && legacy.channelId !== channel.id) {
+      try {
+        const previous = await guild.channels.fetch(legacy.channelId);
+        const message = previous && await previous.messages.fetch({ message: legacy.messageId, force: true });
+        if (message?.author.id === guild.client.user.id) await message.edit({ content: `Role selection moved to <#${channel.id}>.`, embeds: [], components: [], allowedMentions: { parse: [] } });
+      } catch (error) { if (![10003, 10008].includes(error.code)) throw error; }
+    }
+    return panel;
   }
-  async toggleRole(interaction, name) {
-    const config = configFor(this.store, interaction.guildId); verified(interaction, config);
-    if (!['Streamer', 'VIP'].includes(name)) throw new UserError('This role is not self-assignable.');
-    const saved = this.store.get(interaction.guildId, 'deliveries', 'panel:roles');
+  async toggleRole(interaction, key) {
+    const config = configFor(this.store, interaction.guildId);
+    const choice = SELF_ROLES.find((role) => role.key === key);
+    if (!choice) throw new UserError('This role is not self-assignable. Use the current five-role panel.');
+    const saved = this.store.get(interaction.guildId, 'deliveries', 'panel:roles:v2');
     if (saved?.messageId !== interaction.message.id || saved.channelId !== interaction.channelId) throw new UserError('Use the current role panel.');
-    const role = await safeRole(interaction.guild, config.roles?.[name]);
     return this.store.lock(`role:${interaction.guildId}:${interaction.user.id}`, async () => {
       const member = await interaction.guild.members.fetch({ user: interaction.user.id, force: true });
+      if (member.user.bot) throw new UserError('Role selection is for community members, not bots.');
+      if (member.pending) throw new UserError('Complete Discord membership screening before choosing roles.');
+      const role = await safeRole(interaction.guild, config.roles?.[choice.name]);
       const removing = member.roles.cache.has(role.id);
       await member.roles[removing ? 'remove' : 'add'](role, 'Member selected a nonprivileged community role');
-      return { content: `${name} ${removing ? 'removed' : 'added'}.` };
+      return { content: `${choice.emoji} ${choice.name} ${removing ? 'removed' : 'added'}.` };
     });
   }
   job(payload) { return { ...payload, id: randomUUID(), attempts: 0, status: 'pending' }; }

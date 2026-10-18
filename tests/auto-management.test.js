@@ -3,184 +3,228 @@ import test from 'node:test';
 import { ChannelType, PermissionFlagsBits as P } from 'discord.js';
 import { getCommandDefinitions } from '../src/commands/index.js';
 import { autoRule } from '../src/commands/auto-rule.js';
-import { configFor } from '../src/services/management-utils.js';
-import { RULES_TEXT } from '../src/config/rules-text.js';
-import { RULES_AGREE_BUTTON_ID, RULES_MAIN_TEXT, RULES_AGREEMENT_TEXT } from '../src/services/rules-payload.js';
+import { configFor, embed, sendOnce } from '../src/services/management-utils.js';
+import { LAYOUT, SELF_ROLES } from '../src/config/server-layout.js';
 import { fixture } from './helpers/community-fixture.js';
 
-function rulesRequest(f, confirm = false, actor = f.owner) {
-  const request = f.interaction('auto-rule', { confirm }, actor);
-  request.responses = [];
-  request.deferReply = async (payload) => { request.responses.push(['defer', payload]); };
-  request.editReply = async (payload) => { request.responses.push(['edit', payload]); };
-  return request;
-}
 const preview = (f, options = {}, actor = f.owner) => f.management.execute(f.interaction('auto-fix', options, actor));
-async function repair(f, options = {}) { await preview(f, options); return preview(f, { ...options, confirm: true }); }
+async function repair(f) { await preview(f); return preview(f, { confirm: true }); }
 
-test('auto commands serialize with Administrator permissions and explicit confirmation', () => {
-  for (const name of ['auto-fix', 'auto-rule']) {
+test('setup commands expose confirmation without deletion or privileged account-assignment options', () => {
+  for (const name of ['setup-server', 'setup-channels', 'setup-roles', 'auto-fix']) {
     const data = getCommandDefinitions().find((c) => c.name === name);
     assert.equal(data.default_member_permissions, P.Administrator.toString());
-    assert.equal(data.options[0].name, 'confirm'); assert.ok(!data.options[0].required);
+    assert.deepEqual(data.options.map((o) => o.name), ['confirm']);
   }
 });
 
-test('auto-fix preview never mutates Discord or persistent configuration', async (t) => {
-  const f = await fixture(t); f.addChannel('general', { type: ChannelType.GuildVoice });
-  const reply = await preview(f); const plan = JSON.parse(reply.files[0].attachment);
-  assert.ok(plan.actions.some((a) => a.action === 'archive'));
-  assert.ok(plan.actions.some((a) => a.action === 'create' && a.name === 'general'));
-  assert.match(reply.content, /Permanently DELETE: 0/); assert.deepEqual(f.calls, []);
+test('setup alias previews no mutations and rejects old destructive or privileged options', async (t) => {
+  const f = await fixture(t); const reply = await preview(f); const plan = JSON.parse(reply.files[0].attachment);
+  assert.equal(plan.automaticDeletion, false); assert.equal(plan.existingPermissionsChanged, false);
+  assert.equal(plan.privilegedRolesAssigned, false); assert.deepEqual(f.calls, []);
   assert.equal(f.store.get(f.guild.id, 'config', 'server'), null);
-  assert.equal(await f.rulesService.store.get(f.guild.id), null);
-  assert.deepEqual(f.store.list(f.guild.id, 'repairs'), []);
-});
-
-test('auto-fix enforces actor, expiry, options and fingerprint before mutations', async (t) => {
-  const f = await fixture(t);
+  await assert.rejects(preview(f, { delete_conflicts: true }), /deletion was removed/);
+  await assert.rejects(preview(f, { badr: f.ordinary.user }), /assignments were removed/);
   await assert.rejects(preview(f, {}, f.ordinary), /permission/);
-  await assert.rejects(preview(f, { confirm: true }), /without confirm first/);
+});
+
+test('confirmation is bound to command, administrator, settings and expiry', async (t) => {
+  const f = await fixture(t); await assert.rejects(preview(f, { confirm: true }), /fresh setup preview/);
   await preview(f);
-  await assert.rejects(preview(f, { confirm: true, delete_conflicts: true }), /same delete_conflicts/);
-  const admin = f.member(undefined, [f.role('administrator', [P.Administrator])]);
-  await assert.rejects(preview(f, { confirm: true }, admin), /same.*administrator/);
-  await preview(f); f.management.autoFix.reviews.get(`${f.guild.id}:${f.owner.id}`).expires = 0;
-  await assert.rejects(preview(f, { confirm: true }), /within 10 minutes/);
-  await preview(f); f.addChannel('changed-after-preview');
-  await assert.rejects(preview(f, { confirm: true }), /fresh preview/); assert.deepEqual(f.calls, []);
+  await assert.rejects(f.management.execute(f.interaction('setup-server', { confirm: true })), /fresh setup preview/);
+  const other = f.member(undefined, [f.role('Administrator', [P.Administrator])]);
+  await assert.rejects(preview(f, { confirm: true }, other), /fresh setup preview/);
+  await preview(f); f.management.setup.previews.get(`${f.guild.id}:${f.owner.id}:auto-fix`).expires = 0;
+  await assert.rejects(preview(f, { confirm: true }), /fresh setup preview/);
+  await preview(f); f.store.set(f.guild.id, 'config', 'server', { xpEnabled: false });
+  await assert.rejects(preview(f, { confirm: true }), /fresh setup preview/);
+  assert.deepEqual(f.calls, []);
 });
 
-test('auto-fix creates categories, archives incompatible channels and preserves conversations', async (t) => {
-  const f = await fixture(t); const gaming = f.addChannel('gaming');
-  const wrong = f.addChannel('general', { type: ChannelType.GuildVoice }); const unrelated = f.addChannel('our-history');
-  const message = await unrelated.send({ content: 'Keep this conversation' });
+test('simple setup creates the exact requested layout and zero-permission roles without welcome channels', async (t) => {
+  const f = await fixture(t); await repair(f);
+  assert.deepEqual([...f.guild.channels.cache.values()].map((c) => c.name), LAYOUT.flatMap(([category, names]) => [category, ...names]));
+  assert.equal(f.guild.channels.cache.size, 22);
+  assert.ok(f.calls.filter(([kind]) => kind === 'role').every(([, options]) => options.permissions.length === 0));
+  assert.equal(f.calls.some(([kind]) => ['addRole', 'overwrite', 'deleteChannel'].includes(kind)), false);
+  const config = configFor(f.store, f.guild.id);
+  assert.equal(config.welcomeEnabled, false); assert.equal(config.channels.welcome, undefined);
+  assert.equal(f.guild.channels.cache.get(config.categories.VOICE).type, ChannelType.GuildCategory);
+  assert.equal([...f.guild.channels.cache.values()].filter((c) => c.type === ChannelType.GuildVoice).length, 3);
+});
+
+test('legacy channels are renamed and organized while all existing overwrites and messages are preserved', async (t) => {
+  const f = await fixture(t); const category = f.addChannel('GAMING', { type: ChannelType.GuildCategory });
+  const game = f.addChannel('gaming-chat', { parent: category.id });
+  const unrelated = f.addChannel('old-welcome'); const message = await game.send({ content: 'Keep our history' });
+  await game.permissionOverwrites.edit(f.guild.id, { AttachFiles: false }); f.calls.length = 0;
+  const before = [...game.permissionOverwrites.cache.values()].map((o) => [o.id, o.allow.bitfield, o.deny.bitfield]);
   await repair(f); const config = configFor(f.store, f.guild.id);
-  assert.equal(gaming.name, 'gaming');
-  assert.equal(f.guild.channels.cache.get(config.categories.GAMING).type, ChannelType.GuildCategory);
-  assert.match(wrong.name, /general-archived-/);
-  assert.equal(f.guild.channels.cache.get(config.channels.general).type, ChannelType.GuildText);
-  assert.equal(unrelated.messages.cache.get(message.id).content, 'Keep this conversation'); assert.equal(unrelated.parentId, null);
-  assert.equal(f.calls.some(([kind]) => kind === 'deleteChannel'), false);
-  const counts = [f.guild.channels.cache.size, f.guild.roles.cache.size]; await repair(f);
-  assert.deepEqual([f.guild.channels.cache.size, f.guild.roles.cache.size], counts);
-  assert.equal(f.store.list(f.guild.id, 'repairs').at(-1).value.status, 'completed');
+  assert.equal(config.channels['gaming-chat'], game.id); assert.equal(game.name, '💬・gaming-chat');
+  assert.equal(category.name, "🎮 LET'S PLAY");
+  assert.deepEqual([...game.permissionOverwrites.cache.values()].map((o) => [o.id, o.allow.bitfield, o.deny.bitfield]), before);
+  assert.equal(game.messages.cache.get(message.id).content, 'Keep our history');
+  assert.equal(f.guild.channels.cache.get(unrelated.id).name, 'old-welcome');
+  assert.equal(f.calls.some(([kind]) => ['overwrite', 'deleteChannel'].includes(kind)), false);
+  const count = f.guild.channels.cache.size; await repair(f); assert.equal(f.guild.channels.cache.size, count);
 });
 
-test('auto-fix corrects saved names and category placement while preserving channel overwrites', async (t) => {
-  const f = await fixture(t); await f.setup(); const config = configFor(f.store, f.guild.id);
-  const channel = f.guild.channels.cache.get(config.channels.general); channel.name = 'renamed-lounge'; channel.parentId = null;
-  const before = [...channel.permissionOverwrites.cache.values()].map((o) => [o.id, o.allow.bitfield, o.deny.bitfield]);
-  await repair(f); assert.equal(channel.name, 'general'); assert.equal(channel.parentId, config.categories.COMMUNITY);
-  assert.deepEqual([...channel.permissionOverwrites.cache.values()].map((o) => [o.id, o.allow.bitfield, o.deny.bitfield]), before);
+test('public staff resources stop setup for manual review rather than changing permissions', async (t) => {
+  const f = await fixture(t); const channel = f.addChannel('staff-chat');
+  await assert.rejects(preview(f), /make it private manually/);
+  assert.equal(channel.permissionsFor(f.ordinary).has(P.ViewChannel), true); assert.deepEqual(f.calls, []);
 });
 
-test('permanent deletion requires matching delete_conflicts preview and preserves unrelated channels', async (t) => {
-  const f = await fixture(t); const canonical = f.addChannel('general'); const duplicate = f.addChannel('general'); const unrelated = f.addChannel('keep-me');
-  await duplicate.send({ content: 'Explicit deletion removes this history' });
-  const reply = await preview(f, { delete_conflicts: true }); const plan = JSON.parse(reply.files[0].attachment);
-  assert.equal(plan.actions.filter((a) => a.action === 'delete').length, 1);
-  assert.equal(plan.actions.find((a) => a.action === 'delete').id, duplicate.id);
-  assert.match(reply.content, /Deleted channels lose all history and threads/); assert.equal(f.guild.channels.cache.has(duplicate.id), true);
-  await preview(f, { confirm: true, delete_conflicts: true });
-  assert.equal(f.guild.channels.cache.has(duplicate.id), false); assert.equal(f.guild.channels.cache.has(unrelated.id), true);
-  assert.equal(configFor(f.store, f.guild.id).channels.general, canonical.id);
+test('five public buttons toggle safe roles for unverified members and never grant privileged roles', async (t) => {
+  const f = await fixture(t); await repair(f); const config = configFor(f.store, f.guild.id);
+  const panel = f.store.get(f.guild.id, 'deliveries', 'panel:roles:v2');
+  const channel = f.guild.channels.cache.get(panel.channelId); const message = channel.messages.cache.get(panel.messageId);
+  assert.equal(channel.permissionsFor(f.ordinary).has([P.ViewChannel, P.ReadMessageHistory]), true);
+  assert.deepEqual(message.components[0].components.map((b) => b.label), SELF_ROLES.map((r) => r.name));
+  const request = f.interaction('role-panel', { channelId: channel.id, message }, f.ordinary);
+  assert.equal(f.ordinary.roles.cache.has(config.roles.Verified), false);
+  for (const choice of SELF_ROLES) {
+    await f.management.community.toggleRole(request, choice.key); assert.equal(f.ordinary.roles.cache.has(config.roles[choice.name]), true);
+    await f.management.community.toggleRole(request, choice.key); assert.equal(f.ordinary.roles.cache.has(config.roles[choice.name]), false);
+  }
+  await assert.rejects(f.management.community.toggleRole(request, 'Moderator'), /not self-assignable/);
+  await assert.rejects(f.management.community.toggleRole({ ...request, message: { id: 'copied' } }, 'gamer'), /current role panel/);
+  const role = f.guild.roles.cache.get(config.roles.Gamer); role.permissions.add(P.ManageRoles);
+  await assert.rejects(f.management.community.toggleRole(request, 'gamer'), /privileges/);
 });
 
-test('referenced conflicts and categories with children are archived even with deletion enabled', async (t) => {
-  const f = await fixture(t); f.addChannel('general'); const referenced = f.addChannel('general');
-  f.store.set(f.guild.id, 'jobs', 'future', { channelId: referenced.id });
-  f.addChannel('GAMING', { type: ChannelType.GuildCategory }); const duplicate = f.addChannel('GAMING', { type: ChannelType.GuildCategory });
-  const child = f.addChannel('custom-game', { parent: duplicate.id }); await repair(f, { delete_conflicts: true });
-  assert.match(referenced.name, /archived-/); assert.match(duplicate.name, /archived-/); assert.equal(child.parentId, duplicate.id);
-  assert.equal(f.calls.some(([kind]) => kind === 'deleteChannel'), false);
+test('role selection checks screening, bot hierarchy and channel grants before assigning', async (t) => {
+  const f = await fixture(t); await repair(f); const config = configFor(f.store, f.guild.id);
+  const panel = f.store.get(f.guild.id, 'deliveries', 'panel:roles:v2');
+  const request = f.interaction('role-panel', { channelId: panel.channelId, message: { id: panel.messageId } }, f.ordinary);
+  f.ordinary.pending = true;
+  await assert.rejects(f.management.community.toggleRole(request, 'gamer'), /screening/); f.ordinary.pending = false;
+  const role = f.guild.roles.cache.get(config.roles.Gamer); role.position = 101;
+  await assert.rejects(f.management.community.toggleRole(request, 'gamer'), /below the bot/); role.position = 1;
+  await f.guild.channels.cache.get(config.channels['staff-chat']).permissionOverwrites.edit(role.id, { ViewChannel: true });
+  await assert.rejects(f.management.community.toggleRole(request, 'gamer'), /channel permission grants/);
+  assert.equal(f.ordinary.roles.cache.has(role.id), false);
 });
 
-test('auto-fix repairs staff visibility without giving Verified access to staff channels', async (t) => {
-  const f = await fixture(t); const staff = f.addChannel('staff-chat'); const extraRole = f.role('unrelated-role');
-  await staff.permissionOverwrites.edit(extraRole.id, { ViewChannel: true });
-  const reply = await preview(f); const plan = JSON.parse(reply.files[0].attachment);
-  assert.ok(plan.staffResources.find((c) => c.id === staff.id).removeViewAllows.includes(extraRole.id));
-  await preview(f, { confirm: true }); const config = configFor(f.store, f.guild.id);
-  await f.ordinary.roles.add(config.roles.Verified); assert.equal(staff.permissionsFor(f.ordinary).has(P.ViewChannel), false);
-  assert.equal(staff.permissionOverwrites.cache.get(extraRole.id).allow.has(P.ViewChannel, false), false);
-  const moderator = f.member(undefined, [f.guild.roles.cache.get(config.roles.Moderator)]);
-  assert.equal(staff.permissionsFor(moderator).has(P.ViewChannel), true);
+test('private legacy role channels are kept untouched while one new public panel is created', async (t) => {
+  const f = await fixture(t); const old = f.addChannel('choose-roles', { permissionOverwrites: [{ id: f.guild.id, deny: [P.ViewChannel] }, { id: f.bot.id, allow: [P.ViewChannel] }] });
+  f.store.set(f.guild.id, 'config', 'server', { channels: { 'choose-roles': old.id } });
+  await repair(f); const config = configFor(f.store, f.guild.id);
+  assert.notEqual(config.channels['choose-roles'], old.id); assert.equal(old.name, 'choose-roles');
+  assert.equal(old.permissionsFor(f.ordinary).has(P.ViewChannel), false);
+  const count = f.guild.channels.cache.size; await repair(f); assert.equal(f.guild.channels.cache.size, count);
 });
 
-test('missing channel permissions stop all repairs before mutation', async (t) => {
-  const f = await fixture(t); const channel = f.addChannel('general');
-  await channel.permissionOverwrites.edit(f.bot.id, { ManageChannels: false }); f.calls.length = 0;
-  await assert.rejects(preview(f), /before auto-fix/); assert.deepEqual(f.calls, []);
+test('existing native staff roles can view staff channels; no privileged role is created or assigned', async (t) => {
+  const f = await fixture(t); const role = f.role('Community Helpers', [P.ModerateMembers]); const staff = f.member(undefined, [role]);
+  await repair(f); const config = configFor(f.store, f.guild.id); const channel = f.guild.channels.cache.get(config.channels['staff-chat']);
+  assert.equal(channel.permissionsFor(staff).has(P.ViewChannel), true);
+  assert.equal(channel.permissionsFor(f.ordinary).has(P.ViewChannel), false);
+  assert.equal(f.calls.some(([kind]) => kind === 'addRole'), false);
 });
 
-test('auto-fix refuses Administrator on everyone before making changes', async (t) => {
-  const f = await fixture(t); f.guild.roles.everyone.permissions.add(P.Administrator);
-  await assert.rejects(preview(f), /Remove Administrator from @everyone/);
-  assert.deepEqual(f.calls, []);
+test('old destructive setup options cannot delete conflicting channels', async (t) => {
+  const f = await fixture(t); const wrong = f.addChannel('gaming-chat', { type: ChannelType.GuildVoice });
+  await assert.rejects(preview(f), /expected GuildText/);
+  await assert.rejects(preview(f, { delete_conflicts: true }), /deletion was removed/);
+  assert.equal(f.guild.channels.cache.has(wrong.id), true); assert.deepEqual(f.calls, []);
 });
 
-test('empty duplicate categories can be explicitly deleted while system channels stay preserved', async (t) => {
-  const f = await fixture(t); const chosen = f.addChannel('GAMING', { type: ChannelType.GuildCategory });
-  const duplicate = f.addChannel('GAMING', { type: ChannelType.GuildCategory });
-  f.addChannel('general'); const system = f.addChannel('general'); f.guild.systemChannelId = system.id;
-  await repair(f, { delete_conflicts: true });
-  assert.equal(f.guild.channels.cache.has(duplicate.id), false);
-  assert.equal(configFor(f.store, f.guild.id).categories.GAMING, chosen.id);
-  assert.equal(f.guild.channels.cache.has(system.id), true); assert.match(system.name, /archived-/);
-});
-
-test('auto-fix replaces an incompatible saved channel through archive and durable remapping', async (t) => {
-  const f = await fixture(t); const wrong = f.addChannel('general', { type: ChannelType.GuildVoice });
-  f.store.set(f.guild.id, 'config', 'server', { channels: { general: wrong.id } });
-  await repair(f, { delete_conflicts: true });
-  const config = configFor(f.store, f.guild.id);
-  assert.notEqual(config.channels.general, wrong.id);
-  assert.equal(f.guild.channels.cache.get(config.channels.general).type, ChannelType.GuildText);
-  assert.match(wrong.name, /archived-/); assert.equal(f.guild.channels.cache.has(wrong.id), true);
-});
-
-test('partial auto-fix creation resumes using saved IDs and retains an audit', async (t) => {
+test('partial setup recovers saved IDs after API errors without duplicating resources', async (t) => {
   const f = await fixture(t); const create = f.guild.channels.create; let count = 0;
-  f.guild.channels.create = async (...args) => { if (++count === 4) throw new Error('simulated failure'); return create(...args); };
-  await preview(f); await assert.rejects(preview(f, { confirm: true }), /Auto-fix stopped/);
-  assert.equal(f.store.list(f.guild.id, 'repairs').at(-1).value.status, 'needs-review');
+  f.store.set(f.guild.id, 'config', 'server', { complete: true });
+  f.guild.channels.create = async (...args) => { if (++count === 4) throw new Error('simulated Discord failure'); return create(...args); };
+  await preview(f); await assert.rejects(preview(f, { confirm: true }), /simulated/);
+  assert.equal(configFor(f.store, f.guild.id).complete, false, 'a failed upgrade is not reported as complete');
   f.guild.channels.create = create; await repair(f);
-  const channels = [...f.guild.channels.cache.values()].map((c) => `${c.type}:${c.name}`); assert.equal(new Set(channels).size, channels.length);
+  const names = [...f.guild.channels.cache.values()].map((c) => `${c.type}:${c.name}`);
+  assert.equal(new Set(names).size, names.length);
 });
 
-test('auto-rule publishes exact rules and one working Agree panel after auto-fix', async (t) => {
-  const f = await fixture(t); await repair(f); const request = rulesRequest(f);
-  await autoRule.execute(request, { rulesService: f.rulesService, management: f.management });
-  assert.match(request.responses.at(-1)[1].content, /\/auto-rule confirm:true/);
-  let state = await f.rulesService.store.get(f.guild.id); const channel = f.guild.channels.cache.get(state.rulesChannelId);
-  assert.equal(channel.messages.cache.size, 0);
-  await autoRule.execute(rulesRequest(f, true), { rulesService: f.rulesService, management: f.management });
-  state = await f.rulesService.store.get(f.guild.id); const message = channel.messages.cache.get(state.rulesMessageId);
-  const body = channel.messages.cache.get(state.rulesSequence.body);
-  const plainText = (text) => text.replaceAll('*', '').replace(/\n{2,}/g, '\n');
-  const bodyText = plainText(body.embeds[0].description);
-  assert.equal(bodyText, RULES_MAIN_TEXT);
-  assert.equal(plainText(message.embeds[0].description), RULES_AGREEMENT_TEXT);
-  assert.equal(`${bodyText}\n${plainText(message.embeds[0].description)}`, RULES_TEXT);
-  assert.equal(message.components[0].components[0].customId, RULES_AGREE_BUTTON_ID);
-  assert.equal(channel.permissionsFor(f.ordinary).has(P.ViewChannel), true);
+test('auto-rule refresh after setup preserves permissions and offers Agree only', async (t) => {
+  const f = await fixture(t); await repair(f); f.calls.length = 0;
+  const request = (confirm) => { const value = f.interaction('auto-rule', { confirm }); value.deferReply = async () => {}; value.editReply = async () => {}; return value; };
+  const services = { rulesService: f.rulesService, management: f.management };
+  await autoRule.execute(request(false), services); await autoRule.execute(request(true), services);
+  const state = await f.rulesService.store.get(f.guild.id);
+  const channel = f.guild.channels.cache.get(state.rulesChannelId); const message = channel.messages.cache.get(state.rulesMessageId);
+  assert.equal(message.components[0].components.length, 1); assert.equal(message.components[0].components[0].label, 'I Agree');
+  assert.equal(f.calls.some(([kind]) => kind === 'overwrite'), false);
+});
+
+test('migration preserves legacy rules gates, panel history, service destinations and persistent records', async (t) => {
+  const f = await fixture(t); const verified = f.role('Verified'); const moderator = f.role('Moderator', [P.ModerateMembers]);
+  const gameCategory = f.addChannel('GAMING', { type: ChannelType.GuildCategory });
+  const info = f.addChannel('START HERE', { type: ChannelType.GuildCategory });
+  const support = f.addChannel('SUPPORT', { type: ChannelType.GuildCategory });
+  const privateOptions = { permissionOverwrites: [{ id: f.guild.id, deny: [P.ViewChannel] }, { id: verified.id, deny: [P.ViewChannel] },
+    { id: f.bot.id, allow: [P.ViewChannel] }, { id: moderator.id, allow: [P.ViewChannel] }] };
+  const staff = f.addChannel('STAFF', { ...privateOptions, type: ChannelType.GuildCategory });
+  const staffChat = f.addChannel('staff-chat', { ...privateOptions, parent: staff.id });
+  const logs = f.addChannel('mod-logs', { ...privateOptions, parent: staff.id });
+  const game = f.addChannel('gaming-chat', { parent: gameCategory.id });
+  const announcements = f.addChannel('announcements', { parent: info.id });
+  const roles = f.addChannel('choose-roles', { parent: info.id });
+  const tickets = f.addChannel('open-ticket', { parent: support.id });
+  const welcome = f.addChannel('welcome');
+  await sendOnce(f.store, roles, 'panel:roles', { embeds: [embed('Old role panel', 'Legacy choices')], components: [] });
+  await f.rulesService.preview(f.guild, f.owner.id, { layout: 'split' }); await f.rulesService.setup(f.guild, f.owner.id);
+  const rules = await f.rulesService.store.get(f.guild.id);
+  const legacy = { roles: { Verified: verified.id, Moderator: moderator.id }, categories: { GAMING: gameCategory.id, 'START HERE': info.id, SUPPORT: support.id, STAFF: staff.id },
+    channels: { 'gaming-chat': game.id, general: game.id, announcements: announcements.id, 'choose-roles': roles.id, 'open-ticket': tickets.id, 'mod-logs': logs.id, 'ticket-logs': logs.id, 'staff-chat': staffChat.id, '📜・rules': rules.rulesChannelId, welcome: welcome.id },
+    welcomeEnabled: true, xpEnabled: true, antiSpamEnabled: false };
+  f.store.set(f.guild.id, 'config', 'server', legacy);
+  for (const namespace of ['xp', 'tickets', 'cases', 'jobs', 'streams']) f.store.set(f.guild.id, namespace, 'preserved', { marker: namespace, channelId: announcements.id });
+  const ids = [...f.guild.channels.cache.keys()];
+  const snapshot = () => ids.map((id) => [id, [...f.guild.channels.cache.get(id).permissionOverwrites.cache.values()].map((o) => [o.id, o.allow.bitfield, o.deny.bitfield])]);
+  const before = snapshot(); f.calls.length = 0;
+  await repair(f);
+  assert.deepEqual(snapshot(), before);
+  assert.equal(f.calls.some(([kind]) => ['overwrite', 'deleteChannel', 'addRole'].includes(kind)), false);
   const config = configFor(f.store, f.guild.id);
-  assert.equal(f.guild.channels.cache.get(config.channels.welcome).permissionsFor(f.ordinary).has(P.ViewChannel), true);
-  assert.equal(f.guild.channels.cache.get(config.channels.general).permissionsFor(f.ordinary).has(P.ViewChannel), false);
-  await f.rulesService.verify({ guild: f.guild, user: f.ordinary.user, channelId: channel.id, message });
-  assert.equal(f.ordinary.roles.cache.has(state.verifiedRoleId), true);
-  assert.equal(f.guild.channels.cache.get(config.channels.general).permissionsFor(f.ordinary).has(P.ViewChannel), true);
-  assert.equal(f.guild.channels.cache.get(config.channels['staff-chat']).permissionsFor(f.ordinary).has(P.ViewChannel), false);
-  await autoRule.execute(rulesRequest(f), { rulesService: f.rulesService, management: f.management });
-  await autoRule.execute(rulesRequest(f, true), { rulesService: f.rulesService, management: f.management }); assert.equal(channel.messages.cache.size, 3);
+  assert.equal(config.channels.announcements, announcements.id); assert.equal(config.channels['mod-logs'], logs.id);
+  assert.equal(config.channels['gaming-chat'], game.id); assert.equal(config.roles.Verified, verified.id);
+  assert.equal(welcome.name, 'welcome'); assert.equal(config.welcomeEnabled, false); assert.equal(config.antiSpamEnabled, false);
+  const updatedRules = await f.rulesService.store.get(f.guild.id);
+  assert.deepEqual(updatedRules.gatedChannelIds, rules.gatedChannelIds); assert.equal(updatedRules.rulesMessageId, rules.rulesMessageId);
+  assert.notEqual(config.channels['choose-roles'], roles.id);
+  const oldPanel = f.store.get(f.guild.id, 'deliveries', 'panel:roles');
+  assert.deepEqual(roles.messages.cache.get(oldPanel.messageId).components, []);
+  for (const namespace of ['xp', 'tickets', 'cases', 'jobs', 'streams']) assert.deepEqual(f.store.get(f.guild.id, namespace, 'preserved'), { marker: namespace, channelId: announcements.id });
 });
 
-test('auto-rule rejects ordinary members and also works without community services', async (t) => {
-  const f = await fixture(t);
-  await assert.rejects(autoRule.execute(rulesRequest(f, false, f.ordinary), { rulesService: f.rulesService }), /administrators/);
-  assert.deepEqual(f.calls, []);
-  await autoRule.execute(rulesRequest(f), { rulesService: f.rulesService });
-  await autoRule.execute(rulesRequest(f, true), { rulesService: f.rulesService });
-  assert.ok((await f.rulesService.store.get(f.guild.id)).rulesMessageId);
+test('role toggles serialize repeated clicks and report lost Manage Roles safely', async (t) => {
+  const f = await fixture(t); await repair(f); const config = configFor(f.store, f.guild.id);
+  const panel = f.store.get(f.guild.id, 'deliveries', 'panel:roles:v2');
+  const request = f.interaction('role-panel', { channelId: panel.channelId, message: { id: panel.messageId } }, f.ordinary);
+  await Promise.all([f.management.community.toggleRole(request, 'gamer'), f.management.community.toggleRole(request, 'gamer')]);
+  assert.equal(f.ordinary.roles.cache.has(config.roles.Gamer), false);
+  f.botRole.permissions.remove(P.ManageRoles);
+  await assert.rejects(f.management.community.toggleRole(request, 'gamer'), /needs Manage Roles/);
+  assert.equal(f.ordinary.roles.cache.has(config.roles.Gamer), false);
+});
+
+test('existing announcement-channel type is reused without converting it or editing overwrites', async (t) => {
+  const f = await fixture(t); const channel = f.addChannel('announcements', { type: ChannelType.GuildAnnouncement });
+  await repair(f); const config = configFor(f.store, f.guild.id);
+  assert.equal(config.channels.announcements, channel.id);
+  assert.equal(channel.name, '📢・announcements'); assert.equal(channel.type, ChannelType.GuildAnnouncement);
+  assert.equal(f.calls.some(([kind]) => kind === 'overwrite'), false);
+  await f.management.execute(f.interaction('announce', { title: 'Gaming tonight', description: 'Join us for games.' }));
+  assert.equal(channel.messages.cache.size, 1);
+});
+
+test('existing staff roles can handle tickets after category reorganization without new privileged roles', async (t) => {
+  const f = await fixture(t); const role = f.role('Helpers', [P.ModerateMembers]); const helper = f.member(undefined, [role]);
+  await repair(f); const config = configFor(f.store, f.guild.id);
+  await f.ordinary.roles.add(config.roles.Verified);
+  await f.management.execute(f.interaction('ticket', { category: 'General Help' }, f.ordinary));
+  const ticket = f.store.list(f.guild.id, 'tickets')[0]; const channel = f.guild.channels.cache.get(ticket.value.channelId);
+  assert.equal(channel.permissionsFor(helper).has(P.ViewChannel), true);
+  const newParent = f.addChannel('Manual category move', { type: ChannelType.GuildCategory });
+  await channel.setParent(newParent.id, { lockPermissions: false });
+  await f.management.execute(f.interaction('ticket', { category: 'General Help' }, f.ordinary));
+  assert.equal(f.store.list(f.guild.id, 'tickets').length, 1);
+  await f.management.execute(f.interaction('close-ticket', { channelId: channel.id }, helper));
+  assert.equal(f.store.get(f.guild.id, 'tickets', ticket.key).status, 'closed');
 });

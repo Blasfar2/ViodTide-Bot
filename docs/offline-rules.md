@@ -4,7 +4,7 @@ After `/auto-rule` publishes the logo, rules, and agreement, Discord keeps those
 
 The **✅ I Agree** button is a bot interaction. A running, connected VOIDTIDE process must receive it, check the member, and assign Verified. While the process is stopped, the button cannot grant a role; Discord may display an interaction failure. Restarting the process restores handling of the saved current panel. A webhook also cannot assign member roles by itself.
 
-**❌ I Disagree** also needs a running bot to send its private response. It leaves roles unchanged and never automatically kicks or bans members.
+Only **✅ I Agree** is offered; Disagree was removed. The five self-selection role buttons also require the bot to be running.
 
 ## Keep your PC off
 

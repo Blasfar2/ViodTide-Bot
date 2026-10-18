@@ -36,15 +36,20 @@ test('partial server creation resumes using recorded gates without duplicate res
   assert.equal(new Set([...f.guild.roles.cache.values()].map((r) => r.name)).size, f.guild.roles.cache.size);
 });
 
-test('the actual managed bot role may be reused without assigning or weakening it', async (t) => {
+test('the actual managed bot role is preserved without assigning or weakening it', async (t) => {
   const f = await fixture(t); f.botRole.name = 'VOIDTIDE Bot'; f.botRole.managed = true; f.botRole.editable = false; f.botRole.tags = { botId: f.bot.id };
   await f.setup();
-  assert.equal(configFor(f.store, f.guild.id).roles['VOIDTIDE Bot'], f.botRole.id);
+  assert.equal(f.guild.roles.cache.get(f.botRole.id).name, 'VOIDTIDE Bot');
+  assert.equal(f.botRole.managed, true); assert.equal(f.botRole.editable, false);
   assert.equal(f.calls.filter(([kind, options]) => kind === 'role' && options.name === 'VOIDTIDE Bot').length, 0);
 });
 
 test('welcome and goodbye sends are deduplicated, and screening never receives an automatic role', async (t) => {
   const f = await fixture(t); await f.setup(); const config = configFor(f.store, f.guild.id);
+  assert.equal(config.channels.welcome, undefined); assert.equal(config.welcomeEnabled, false);
+  const legacy = f.addChannel('legacy-greetings');
+  config.channels.welcome = legacy.id; config.roles.Newcomer = f.role('Newcomer').id; config.welcomeEnabled = true;
+  f.store.set(f.guild.id, 'config', 'server', config);
   f.ordinary.pending = true;
   await f.management.community.memberEvent(f.ordinary, true); await f.management.community.memberEvent(f.ordinary, true);
   assert.equal(f.ordinary.roles.cache.has(config.roles.Newcomer), false);
@@ -179,7 +184,8 @@ test('welcome configuration refuses private destinations and supports explicit e
   const f = await fixture(t); await f.setup(); const config = configFor(f.store, f.guild.id);
   await assert.rejects(f.management.execute(f.interaction('welcome-config', { enabled: true, channel: f.guild.channels.cache.get(config.channels['staff-chat']) })), /newcomers/);
   await f.management.execute(f.interaction('welcome-config', { enabled: false })); assert.equal(configFor(f.store, f.guild.id).welcomeEnabled, false);
-  await f.management.execute(f.interaction('welcome-config', { enabled: true })); assert.equal(configFor(f.store, f.guild.id).welcomeEnabled, true);
+  await assert.rejects(f.management.execute(f.interaction('welcome-config', { enabled: true })), /configure this channel/);
+  await f.management.execute(f.interaction('welcome-config', { enabled: true, channel: f.guild.channels.cache.get(config.channels.general) })); assert.equal(configFor(f.store, f.guild.id).welcomeEnabled, true);
 });
 
 test('rank, leaderboard, reward, warning and status commands reflect persistent state', async (t) => {

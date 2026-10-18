@@ -1,6 +1,6 @@
 import { MessageFlags } from 'discord.js';
 import { RulesError } from '../services/rules-errors.js';
-import { RULES_AGREE_BUTTON_ID, RULES_DISAGREE_BUTTON_ID } from '../services/rules-payload.js';
+import { RULES_AGREE_BUTTON_ID } from '../services/rules-payload.js';
 
 async function sendPrivateError(interaction, content) {
   if (interaction.deferred || interaction.replied) {
@@ -11,9 +11,10 @@ async function sendPrivateError(interaction, content) {
 }
 
 export async function handleInteraction(interaction, { commands, guildId, logger, rulesService, management }) {
-  const verification = interaction.isButton?.() && [RULES_AGREE_BUTTON_ID, RULES_DISAGREE_BUTTON_ID].includes(interaction.customId);
+  const verification = interaction.isButton?.() && interaction.customId === RULES_AGREE_BUTTON_ID;
+  const retiredChoice = interaction.isButton?.() && interaction.customId === 'voidtide:rules:disagree:v1';
   const managedButton = interaction.isButton?.() && /^voidtide:(ticket|close|role|poll):/.test(interaction.customId);
-  if (!verification && !managedButton && !interaction.isChatInputCommand()) return;
+  if (!verification && !retiredChoice && !managedButton && !interaction.isChatInputCommand()) return;
 
   try {
     if (!interaction.inGuild() || interaction.guildId !== guildId) {
@@ -21,11 +22,14 @@ export async function handleInteraction(interaction, { commands, guildId, logger
       return;
     }
 
+    if (retiredChoice) {
+      await sendPrivateError(interaction, 'Disagree was removed. Use the current rules panel and ✅ I Agree if you accept the rules.');
+      return;
+    }
     if (verification) {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      const agreed = interaction.customId === RULES_AGREE_BUTTON_ID;
-      let content = agreed ? await rulesService.verify(interaction) : await rulesService.disagree(interaction);
-      if (management && agreed) {
+      let content = await rulesService.verify(interaction);
+      if (management) {
         try { await management.run(() => management.afterVerify(interaction)); }
         catch (error) {
           logger.error('Verification succeeded, but newcomer label cleanup needs staff review.', error);
