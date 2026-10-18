@@ -29,7 +29,8 @@ const readOnlyRules = {
 };
 
 function chooseResource(collection, savedId, name, type) {
-  const candidates = [...collection.values()].filter((item) => item.name.toLowerCase() === name.toLowerCase());
+  const candidates = [...collection.values()].filter((item) => item.name.toLowerCase() === name.toLowerCase()
+    && (type === undefined || (item.type === ChannelType.GuildCategory) === (type === ChannelType.GuildCategory)));
   const saved = savedId ? collection.get(savedId) : null;
   if (candidates.length > 1 || (saved && candidates.some((item) => item.id !== saved.id))) {
     throw new RulesError(`More than one ${name} resource exists. An administrator must resolve the duplicates before setup.`);

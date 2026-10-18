@@ -5,6 +5,7 @@ import { CommunityService } from './community-service.js';
 import { ModerationService } from './moderation-service.js';
 import { PollService } from './poll-service.js';
 import { ServerSetup } from './server-setup.js';
+import { AutoFix } from './auto-fix.js';
 import { StreamService } from './stream-service.js';
 import { TicketService } from './ticket-service.js';
 import { STAFF_ROLES } from '../config/server-layout.js';
@@ -23,6 +24,7 @@ export class Management {
       await this.tickets.panel(guild, config); await this.community.rolePanel(guild, config);
       await sendOnce(store, await textChannel(guild, config.channels['level-rewards']), 'panel:level-rewards', await this.community.levelRewards({ guildId: guild.id }), { edit: true });
     } });
+    this.autoFix = new AutoFix({ ...shared, setup: this.setup });
     this.running = false;
     this.active = new Set(); this.stopping = false;
   }
@@ -50,6 +52,7 @@ export class Management {
   }
   async execute(interaction) {
     const name = interaction.commandName;
+    if (name === 'auto-fix') return this.autoFix.run(interaction);
     if (['setup-server', 'setup-roles', 'setup-channels'].includes(name)) return this.setup.run(interaction, name.slice(6));
     if (['setup-status', 'channel-status'].includes(name)) { requirePermission(interaction); return this.setup.status(interaction.guild); }
     if (name === 'announce') return this.community.announce(interaction);

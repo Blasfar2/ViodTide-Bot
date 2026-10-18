@@ -8,10 +8,15 @@ export const BOT_PERMISSIONS = [P.ViewChannel, P.SendMessages, P.EmbedLinks, P.A
 
 function candidate(collection, id, name, type) {
   const saved = id && collection.get(id);
-  const matches = [...collection.values()].filter((item) => item.name.toLowerCase() === name.toLowerCase());
+  const typeError = (item) => new UserError(`The existing ${name} (<#${item.id}>) is ${ChannelType[item.type]}; expected ${ChannelType[type]}. Review this resource${saved ? ' and its saved configuration' : ''} before retrying. Setup will not convert or delete it.`);
+  if (saved && type !== undefined && saved.type !== type) throw typeError(saved);
+  // Discord allows categories and their channels to share a name. Keep those
+  // namespaces separate, but still reject incompatible text/voice candidates.
+  const matches = [...collection.values()].filter((item) => item.name.toLowerCase() === name.toLowerCase()
+    && (type === undefined || (item.type === ChannelType.GuildCategory) === (type === ChannelType.GuildCategory)));
   if (matches.length > 1 || (saved && matches.some((item) => item.id !== saved.id))) throw new UserError(`Duplicate candidates for ${name}. Resolve them manually; setup never deletes resources.`);
   const item = saved || matches[0];
-  if (item && type !== undefined && item.type !== type) throw new UserError(`The existing ${name} has the wrong channel type.`);
+  if (item && type !== undefined && item.type !== type) throw typeError(item);
   return item;
 }
 export class ServerSetup {
@@ -78,12 +83,13 @@ export class ServerSetup {
           roles: plan.plannedRoles.map((r) => ({ name: r.name, id: r.role?.id ?? null, action: r.role ? 'reuse unchanged' : 'create', permissions: r.permissions.map((bit) => Object.keys(P).find((name) => P[name] === bit)) })),
           channels: plan.plannedChannels.map((c) => ({ name: c.name, id: c.channel?.id ?? null, category: c.category, type: c.type, action: c.channel ? 'reuse; keep existing permissions except reviewed welcome/rules access' : 'create with explicit private/verified/public permissions', staffOnly: c.staff })),
           existingGates: plan.rulesInspection?.plan.targets.filter((c) => c.name !== 'welcome').map((c) => ({ id: c.id, name: c.name, denyEveryoneView: true, allowVerifiedAndBotView: true })) ?? [],
-          newcomerPublicChannels: ['welcome', '📜・rules'], existingMembersMustVerify: scope === 'server', automaticDeletion: false,
+          newcomerPublicChannels: ['welcome', '📜・rules'], existingMembersMustVerify: scope === 'server', automaticDeletion: false, categoryNamesSeparateFromChannels: true,
         };
         return { files: [{ attachment: Buffer.from(JSON.stringify(detail, null, 2)), name: 'voidtide-setup-preview.json' }], content: [
           `**VOIDTIDE ${scope} setup preview**`,
           `Create ${newRoles.length} missing roles: ${newRoles.join(', ') || 'none'}.`,
           `Create ${newChannels.length} missing categories/channels: ${newChannels.join(', ') || 'none'}.`,
+          'Categories and channels are matched separately: an existing #gaming does not replace the GAMING category.',
           'Existing resources are reused; nothing is deleted or renamed. Staff resources must already be private. Founder, Co-Founder and Moderator get the listed moderation/event powers; no role receives Administrator.',
           scope === 'server' ? 'Publish/reuse rules, ticket and role panels; configure welcome, XP/rewards, announcement and private log channels. Gate public community access behind Verified; welcome and rules remain public. Existing unverified members must agree too. Rules/welcome may be detached from a gated category to retain access.' : 'This scope creates the listed resources only. Run /setup-server to activate all services and verification.',
           Object.keys(members).length ? `**Owner-selected team IDs:** ${Object.entries(members).map(([name, id]) => `${name}: ${id}`).join(', ')}. Only these selected IDs receive the corresponding roles.` : 'No team roles will be assigned to members.',

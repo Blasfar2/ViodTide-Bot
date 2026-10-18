@@ -72,12 +72,38 @@ Keep `npm start` running. Use `npm run dev` for automatic restarts during develo
 
 Start in a disposable development server. Record existing channel overwrites and back up `data/` before changing a production server.
 
+### Automatic layout repair and rules
+
+If setup reports an incompatible channel, use the administrator repair commands. In Codespaces, stop the bot with Ctrl+C, then update and register:
+
+```sh
+git pull --ff-only
+npm run deploy:commands
+npm start
+```
+
+In Discord:
+
+1. Run `/auto-fix` and read the private JSON preview. It lists missing categories/channels/roles, canonical names, channel moves, conflicts, and staff permission changes.
+2. Run `/auto-fix confirm:true` to apply that exact plan within ten minutes. Incompatible resources and duplicate names are renamed with an `-archived-ID` suffix; their channels and messages remain. Missing correct resources are created, saved names are restored, and managed channels are moved into the standard categories without synchronizing their permissions. Unrelated channels are preserved.
+3. Run `/auto-rule`. Review its verification permission preview, then run `/auto-rule confirm:true`. It publishes or updates one approved rules embed with **✅ I Agree**, creates/reuses Verified, and gates community access. Welcome/rules remain available to newcomers after a completed auto-fix. Agree assigns Verified; staff channels remain private.
+
+**Optional permanent deletion:** `/auto-fix delete_conflicts:true` previews deleting eligible conflicting channels instead of archiving them. Only confirm using `/auto-fix confirm:true delete_conflicts:true` after reviewing the exact IDs. **Deletion permanently removes messages and threads.** Saved/referenced channels, Discord-designated system channels, and categories with children are archived instead. Unrelated resources are never deletion targets. This does not delete every channel outside the template.
+
+**Permission changes:** auto-fix makes the STAFF category and its standard channels private to @everyone and Verified, allows the bot and Founder/Co-Founder/Moderator, and removes unrelated explicit View Channel grants. Synced children inherit the STAFF category changes; their IDs are listed in the preview. Other permission bits remain. Newly created non-staff resources allow Verified and the bot; new welcome/rules channels are public/read-only. Founder/Co-Founder/Moderator roles receive the moderation/event powers described above, never Administrator; no member is assigned a staff role by these commands.
+
+Repairs and completed steps are saved in SQLite under `repairs`; failures require a fresh preview. Permission/role/channel changes, changed deletion options, another actor, expiry, or a restart invalidate the confirmation. Back up data before deleting resources. `/auto-rule` also works with community services disabled. `/auto-fix` requires `ENABLE_COMMUNITY=true`. The two commands repair layout and verification; use the full setup below to activate welcome, XP, announcements and other service panels.
+
+### Full service setup
+
 1. As an administrator, run **`/setup-server`**. It makes no Discord changes. Read the private summary and attached **complete JSON plan**, including existing channels that will be gated.
 2. If you are the server owner and want team assignments, use the optional `badr`, `yacin`, `nisrine`, and `mehdi` account selectors. Review the selected IDs and intended staff powers.
 3. Within ten minutes, run **`/setup-server confirm:true`** with exactly the same account selections. A role/channel change or process restart invalidates the preview.
 4. Run **`/setup-status`** and test with a separate ordinary member account.
 
 Confirmed full setup creates missing resources and reuses saved IDs/unique names. It does not delete resources, reset unrelated permissions, mass-verify members, or overwrite incompatible existing roles. Ambiguous names, unsafe staff visibility, conflicting role permissions, and unsupported access bypasses stop setup for manual review. Existing resources are not automatically moved to another category. The rules/welcome channel may be detached from a gated category so newcomers retain access.
+
+Categories and channels are matched separately. An existing text or voice channel named `gaming` is preserved while setup creates or reuses the `GAMING` category shown in the preview. Existing public channels still appear in the verification access plan. Multiple matching categories, incompatible text/voice channels, or a saved ID pointing to the wrong type stop setup for review.
 
 **Visibility changes:** existing public community channels are gated behind Verified. Existing members without Verified must agree too. Rules and welcome remain public/read-only. Staff resources and ticket archives stay private. Administrators inherently bypass Discord overwrites. New public channels added later require another reviewed setup run. Never auto-assign unrelated visibility-bypass roles to newcomers.
 

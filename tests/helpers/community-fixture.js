@@ -94,6 +94,7 @@ export async function fixture(t) {
       },
       async setParent(parent) { calls.push(['parent', channel.id]); this.parentId = parent; },
       async setName(name) { calls.push(['rename', channel.id]); this.name = name; },
+      async delete() { calls.push(['deleteChannel', channel.id]); channels.delete(channel.id); return this; },
       async bulkDelete(collection) { for (const id of collection.keys()) messages.delete(id); calls.push(['bulkDelete', collection.size]); return collection; },
     };
     channels.set(channel.id, channel); return channel;

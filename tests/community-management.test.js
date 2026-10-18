@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { PermissionFlagsBits as P } from 'discord.js';
+import { ChannelType, PermissionFlagsBits as P } from 'discord.js';
 import { Store } from '../src/database/store.js';
 import { getCommandDefinitions } from '../src/commands/index.js';
 import { configFor, embed, futureTime, sendOnce, UserError } from '../src/services/management-utils.js';
@@ -71,6 +71,66 @@ test('public staff channels, duplicate resources, and unsafe existing roles stop
     await assert.rejects(f.management.execute(f.interaction('setup-server')), UserError);
     assert.deepEqual(f.calls, []);
   }
+});
+
+test('setup separates same-named categories and channels and remains idempotent', async (t) => {
+  const f = await fixture(t);
+  const text = f.addChannel('gaming');
+  const voice = f.addChannel('GAMING', { type: ChannelType.GuildVoice });
+  const category = f.addChannel('general', { type: ChannelType.GuildCategory });
+  const message = await text.send({ content: 'Existing gaming conversation' });
+  f.calls.length = 0;
+  const preview = await f.management.execute(f.interaction('setup-server'));
+  const detail = JSON.parse(preview.files[0].attachment.toString());
+  assert.deepEqual(f.calls, []);
+  assert.equal(detail.categoryNamesSeparateFromChannels, true);
+  assert.equal(detail.channels.find((c) => c.name === 'GAMING').id, null);
+  assert.ok(detail.existingGates.some((c) => c.id === text.id));
+  await f.management.execute(f.interaction('setup-server', { confirm: true }));
+  const config = configFor(f.store, f.guild.id);
+  assert.equal(f.guild.channels.cache.get(config.categories.GAMING).type, ChannelType.GuildCategory);
+  assert.equal(f.guild.channels.cache.get(config.channels.general).type, ChannelType.GuildText);
+  assert.equal(text.type, ChannelType.GuildText); assert.equal(text.name, 'gaming');
+  assert.equal(voice.type, ChannelType.GuildVoice); assert.equal(category.type, ChannelType.GuildCategory);
+  assert.equal(text.messages.cache.get(message.id).content, 'Existing gaming conversation');
+  assert.equal(f.calls.some(([kind]) => kind === 'rename'), false);
+  const count = f.guild.channels.cache.size;
+  await f.setup();
+  assert.equal(f.guild.channels.cache.size, count);
+  assert.equal(configFor(f.store, f.guild.id).categories.GAMING, config.categories.GAMING);
+});
+
+test('multiple matching categories remain ambiguous even beside a same-named channel', async (t) => {
+  const f = await fixture(t);
+  f.addChannel('gaming');
+  f.addChannel('GAMING', { type: ChannelType.GuildCategory });
+  f.addChannel('gaming', { type: ChannelType.GuildCategory });
+  await assert.rejects(f.management.execute(f.interaction('setup-server')), /Duplicate candidates for GAMING/);
+  assert.deepEqual(f.calls, []);
+});
+
+test('a saved category of the wrong type is never silently replaced', async (t) => {
+  const f = await fixture(t); const text = f.addChannel('gaming');
+  f.addChannel('GAMING', { type: ChannelType.GuildCategory });
+  f.store.set(f.guild.id, 'config', 'server', { categories: { GAMING: text.id } });
+  await assert.rejects(f.management.execute(f.interaction('setup-server')), (error) => {
+    assert.ok(error instanceof UserError);
+    assert.match(error.message, /GuildText; expected GuildCategory/);
+    assert.ok(error.message.includes(text.id));
+    assert.match(error.message, /saved configuration/);
+    return true;
+  });
+  assert.deepEqual(f.calls, []);
+});
+
+test('incompatible voice channels cannot replace required text channels', async (t) => {
+  const f = await fixture(t); const voice = f.addChannel('general', { type: ChannelType.GuildVoice });
+  await assert.rejects(f.management.execute(f.interaction('setup-server')), (error) => {
+    assert.match(error.message, /GuildVoice; expected GuildText/);
+    assert.ok(error.message.includes(voice.id));
+    return true;
+  });
+  assert.deepEqual(f.calls, []);
 });
 
 test('only owner-selected confirmed IDs receive team roles', async (t) => {
