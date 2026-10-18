@@ -1,0 +1,27 @@
+{
+  "name": "voidtide-discord-bot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "VOIDTIDE Bot — Phase 1 Discord bot foundation",
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "deploy:commands": "node scripts/deploy-commands.js",
+    "commands:preview": "node scripts/deploy-commands.js --dry-run",
+    "check": "eslint .",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "discord.js": "^14.27.0",
+    "dotenv": "^18.0.8"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.13.0"
+  }
+}
