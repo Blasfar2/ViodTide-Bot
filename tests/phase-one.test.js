@@ -196,7 +196,7 @@ test('failed error responses are caught and logged without an unhandled rejectio
   assert.match(logger.entries[1][1], /error response/);
 });
 
-test('registration sends only the /ping definition to this application and guild', async () => {
+test('registration retains /ping and sends the approved commands to this application and guild', async () => {
   const calls = [];
   const response = [{ id: 'test-command-id' }];
   const result = await registerCommands({
@@ -205,7 +205,7 @@ test('registration sends only the /ping definition to this application and guild
   assert.equal(result, response);
   assert.equal(calls.length, 1);
   assert.equal(calls[0][0], `/applications/${config.clientId}/guilds/${config.guildId}/commands`);
-  assert.equal(calls[0][1].body.length, 1);
+  assert.deepEqual(calls[0][1].body.map((command) => command.name), ['ping', 'rules', 'setup-rules']);
   assert.equal(calls[0][1].body[0].name, 'ping');
   assert.match(calls[0][1].body[0].description, /VOIDTIDE Bot/);
 });
@@ -290,7 +290,7 @@ test('command preview works without credentials and emits a valid /ping payload'
   assert.ifError(result.error);
   assert.equal(result.status, 0, result.stderr);
   const definitions = JSON.parse(result.stdout);
-  assert.equal(definitions.length, 1);
+  assert.deepEqual(definitions.map((command) => command.name), ['ping', 'rules', 'setup-rules']);
   assert.equal(definitions[0].name, 'ping');
   assert.equal(result.stderr, '');
 });
