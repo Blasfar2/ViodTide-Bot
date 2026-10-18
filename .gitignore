@@ -10,6 +10,9 @@ node_modules/
 npm-debug.log*
 coverage/
 
+# Persistent runtime state (back up outside Git)
+data/
+
 # Operating-system metadata
 .DS_Store
 Thumbs.db
