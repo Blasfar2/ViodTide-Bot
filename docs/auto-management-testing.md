@@ -15,6 +15,8 @@ Use a test server and a backup of `data/`. Enable the required intents and place
 - [ ] A Discord permission error stops repair; completed IDs and audit entries survive restart. A fresh preview repairs remaining work without duplicate creates.
 - [ ] `/auto-rule logo:` accepts your PNG/JPEG/WebP attachment during preview. Confirmation without reattaching it posts three separate bot messages: logo, welcome/rules 01–10, then violations/agreement and a green ✅ I Agree button. The text uses bold headings, readable paragraph spacing and an emphasized agreement. Removing presentation Markdown and extra blank lines from both descriptions yields the approved text exactly.
 - [ ] An unverified test member can read rules/welcome and cannot see the gated general channel; clicking Agree assigns Verified and unlocks general, while staff and private tickets stay hidden.
+- [ ] The final message also has a red ❌ I Disagree button. It replies privately, leaves a newcomer unverified and restricted, and lets them choose Agree later. Copied/old panels are rejected.
+- [ ] Disagree never kicks, bans or changes roles. An already verified member is directed to staff, keeping their role until a staff-reviewed change.
 - [ ] Repeated `/auto-rule` preview/confirm edits the existing three messages without duplicates; repeating Agree reports already verified. Migration from the old single panel keeps one ordered sequence.
 - [ ] Delete a middle rules post in the test server, then rerun preview/confirm. The bot restores three correctly ordered posts and only the last has an active button.
 - [ ] Restart and rerun `/auto-rule` without a logo option. It reuses `data/rules-assets/`, with no external image host and no repeated logo download.

@@ -4,6 +4,8 @@ After `/auto-rule` publishes the logo, rules, and agreement, Discord keeps those
 
 The **✅ I Agree** button is a bot interaction. A running, connected VOIDTIDE process must receive it, check the member, and assign Verified. While the process is stopped, the button cannot grant a role; Discord may display an interaction failure. Restarting the process restores handling of the saved current panel. A webhook also cannot assign member roles by itself.
 
+**❌ I Disagree** also needs a running bot to send its private response. It leaves roles unchanged and never automatically kicks or bans members.
+
 ## Keep your PC off
 
 Codespaces runs on GitHub's cloud infrastructure, so your PC can be off while that Codespace is running. Idle timeouts, available usage, stopping/deleting the Codespace, and network failures still stop your bot. Do not assume Codespaces supplies permanent free 24/7 hosting. Continuous custom-button verification needs a continuously running host. No hosting provider or paid service is configured by this update.

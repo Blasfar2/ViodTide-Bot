@@ -2,6 +2,7 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'disc
 import { RULES_TEXT } from '../config/rules-text.js';
 
 export const RULES_AGREE_BUTTON_ID = 'voidtide:rules:agree:v1';
+export const RULES_DISAGREE_BUTTON_ID = 'voidtide:rules:disagree:v1';
 export const RULES_CHANNEL_NAME = '📜・rules';
 export const VERIFIED_ROLE_NAME = 'Verified';
 export const RULES_FOOTER = 'VOIDTIDE • Different Worlds, One Community.';
@@ -47,6 +48,11 @@ export function rulesPayload({ verification = false } = {}) {
         .setLabel('I Agree')
         .setEmoji('✅')
         .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId(RULES_DISAGREE_BUTTON_ID)
+        .setLabel('I Disagree')
+        .setEmoji('❌')
+        .setStyle(ButtonStyle.Danger),
     )] : [],
     allowedMentions: { parse: [] },
   };

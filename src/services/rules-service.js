@@ -220,7 +220,7 @@ export class RulesService {
         return [
           '**VOIDTIDE rules setup — permission preview**',
           `${inspection.role ? 'Reuse' : 'Create'} **Verified**; ${inspection.channel ? 'reuse' : 'create'} **${RULES_CHANNEL_NAME}**.`,
-          selectedLayout === 'split' ? `Publish **three bot messages in order**: logo image; welcome and rules 01–10; violations/agreement with green ✅ I Agree. ${pendingLogo ? 'Use the logo you attached; keep it locally for later updates.' : inspection.state.rulesLogo ? 'Reuse your saved logo.' : 'Use the bot avatar as the logo. Attach your exact logo with /auto-rule logo if needed.'} Existing bot rules posts may be repurposed in order; nothing is deleted.` : 'Publish or update one rules panel.',
+          selectedLayout === 'split' ? `Publish **three bot messages in order**: logo image; welcome and rules 01–10; violations/agreement with ✅ I Agree and ❌ I Disagree. ${pendingLogo ? 'Use the logo you attached; keep it locally for later updates.' : inspection.state.rulesLogo ? 'Reuse your saved logo.' : 'Use the bot avatar as the logo. Attach your exact logo with /auto-rule logo if needed.'} Existing bot rules posts may be repurposed in order; nothing is deleted.` : 'Publish or update one rules panel with ✅ I Agree and ❌ I Disagree.',
           `Gate **${inspection.plan.targets.length}** public channels/categories: deny @everyone View Channel; allow Verified and the bot to view them. Other permission bits stay as configured.`,
           examples ? `Targets (first 12): ${examples}` : 'No public channels need gating.',
           `Keep **${inspection.plan.skippedPrivate.length}** private channels/categories private. The rules channel stays public and read-only, with /rules and the agreement button available.`,
@@ -309,7 +309,27 @@ export class RulesService {
         });
         await applyPermissionPlan(plan, { guild, verifiedRoleId: role.id, reason });
         await this.store.set(guild.id, { complete: true });
-        return `Rules are ready in <#${channel.id}>. Members can press **✅ I Agree** to receive **Verified**. Public-channel restrictions and panel settings have been saved. Run setup again when adding public channels.`;
+        return `Rules are ready in <#${channel.id}>. **✅ I Agree** assigns **Verified**. **❌ I Disagree** explains privately that agreement is required, without changing roles. Public-channel restrictions and panel settings have been saved. Run setup again when adding public channels.`;
+      } catch (error) {
+        throw safeOperationError(error);
+      }
+    });
+  }
+
+  async disagree(interaction) {
+    return this.store.withGuildLock(interaction.guild.id, async () => {
+      try {
+        const state = await this.store.get(interaction.guild.id);
+        if (!state?.rulesMessageId || state.rulesChannelId !== interaction.channelId
+          || state.rulesMessageId !== interaction.message.id) {
+          throw new RulesError('This verification panel is inactive. Use the current rules channel or ask an administrator to rerun /auto-rule.');
+        }
+        const member = await interaction.guild.members.fetch({ user: interaction.user.id, force: true });
+        if (member.user.bot) throw new RulesError('Rules choices are available to community members, not bot accounts.');
+        if (state.verifiedRoleId && member.roles.cache.has(state.verifiedRoleId)) {
+          return 'You already have Verified. Your roles have not changed. If you want to withdraw your agreement, contact staff privately.';
+        }
+        return 'You chose not to agree. You remain unverified, so community channels stay restricted. You can read the rules again and choose ✅ I Agree when you are ready, or contact staff if you have questions.';
       } catch (error) {
         throw safeOperationError(error);
       }
