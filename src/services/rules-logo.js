@@ -23,8 +23,11 @@ export class RulesLogo {
     if (!attachment || !Number.isSafeInteger(attachment.size) || attachment.size < 1 || attachment.size > limit) throw new RulesError('Upload a PNG, JPEG or WebP logo, up to 5 MiB.');
     let url;
     try { url = new URL(attachment.url); } catch { throw new RulesError('Select a Discord-uploaded logo attachment.'); }
+    // Slash-command uploads may live under ephemeral-attachments rather than
+    // the attachments path used for ordinary channel-message uploads.
+    const attachmentPath = ['/attachments/', '/ephemeral-attachments/'].some((prefix) => url.pathname.startsWith(prefix));
     if (url.protocol !== 'https:' || !['cdn.discordapp.com', 'media.discordapp.net'].includes(url.hostname)
-      || !url.pathname.startsWith('/attachments/') || url.username || url.password || url.port) throw new RulesError('Select a Discord-uploaded logo attachment. External image URLs are not accepted.');
+      || !attachmentPath || url.username || url.password || url.port) throw new RulesError('Use the logo attachment picker in /auto-rule to upload your PNG, JPEG or WebP file. Only Discord attachment URLs are accepted.');
     try {
       const response = await this.fetchImpl(url, { redirect: 'error', signal: globalThis.AbortSignal.timeout(10_000) });
       if (!response.ok || !response.body || Number(response.headers.get('content-length')) > limit) throw new Error('Logo download failed');

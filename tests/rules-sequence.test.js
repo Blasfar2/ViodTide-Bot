@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { ButtonStyle, PermissionFlagsBits as P } from 'discord.js';
+import { Attachment, ButtonStyle, PermissionFlagsBits as P } from 'discord.js';
 import { RULES_TEXT } from '../src/config/rules-text.js';
 import { RulesLogo } from '../src/services/rules-logo.js';
 import { RulesService } from '../src/services/rules-service.js';
@@ -129,7 +129,7 @@ test('logo uploads are staged only for preview, saved locally and sent by the bo
 test('logo validation blocks external destinations, redirects, invalid formats and oversized uploads', async (t) => {
   let calls = 0; const logos = await assetFixture(t, async () => { calls++; return new globalThis.Response('not an image'); });
   for (const url of ['http://cdn.discordapp.com/attachments/a/b', 'https://example.com/logo.png', 'https://cdn.discordapp.com.evil.test/attachments/a/b', 'https://cdn.discordapp.com/api/test', 'https://user:secret@cdn.discordapp.com/attachments/a/b']) {
-    await assert.rejects(logos.prepare({ ...upload, url }), /Discord-uploaded/);
+    await assert.rejects(logos.prepare({ ...upload, url }), /logo attachment picker/);
   }
   await assert.rejects(logos.prepare({ ...upload, size: 6 * 1024 * 1024 }), /5 MiB/); assert.equal(calls, 0);
   await assert.rejects(logos.prepare(upload), /PNG, JPEG or WebP/);
@@ -138,6 +138,22 @@ test('logo validation blocks external destinations, redirects, invalid formats a
   const oversized = await assetFixture(t, async () => new globalThis.Response(Buffer.alloc(5 * 1024 * 1024 + 1)));
   await assert.rejects(oversized.prepare(upload), /5 MiB/);
 });
+
+for (const host of ['cdn.discordapp.com', 'media.discordapp.net']) {
+  test(`temporary slash-command PNG attachments are accepted on ${host}`, async (t) => {
+    const url = `https://${host}/ephemeral-attachments/123456789012345678/234567890123456789/VOIDTIDE.png?ex=123&is=456&hm=test-only`;
+    const attachment = new Attachment({ id: '234567890123456789', filename: 'VOIDTIDE.png', size: png.length,
+      content_type: 'image/png', url, proxy_url: url });
+    let downloaded;
+    const logos = await assetFixture(t, async (target, options) => {
+      downloaded = target.href; assert.equal(options.redirect, 'error');
+      return new globalThis.Response(png);
+    });
+    const prepared = await logos.prepare(attachment);
+    assert.equal(downloaded, url, 'preserve the Discord-signed attachment URL');
+    assert.equal(prepared.format, 'png'); assert.deepEqual(prepared.bytes, png);
+  });
+}
 
 test('a damaged saved logo fails safely and uploading it again repairs the asset', async (t) => {
   const logos = await assetFixture(t); const asset = await logos.prepare(upload);
