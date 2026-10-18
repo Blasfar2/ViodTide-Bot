@@ -195,3 +195,16 @@ test('safe RulesError guidance is returned while arbitrary error text stays priv
       : 'Something went wrong while running this command. Please try again.');
   }
 });
+
+test('verification remains successful when optional newcomer-label cleanup needs staff review', async () => {
+  const request = interaction({ isButton: () => true, isChatInputCommand: () => false, customId: RULES_AGREE_BUTTON_ID });
+  const logged = [];
+  await handleInteraction(request, {
+    commands: new Map(), guildId: 'guild', logger: { error: (...args) => logged.push(args) },
+    rulesService: { async verify() { return 'You are verified.'; } },
+    management: { run: (callback) => callback(), async afterVerify() { throw new RulesError('Unsafe newcomer role.'); } },
+  });
+  assert.match(request.calls[1][1].content, /You are verified/);
+  assert.match(request.calls[1][1].content, /verification itself succeeded/);
+  assert.equal(logged.length, 1);
+});

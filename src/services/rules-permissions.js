@@ -40,6 +40,7 @@ export async function buildPermissionPlan(guild, {
   botMember,
   gatedChannelIds = [],
   channels = guild.channels.cache,
+  publicChannelIds = [],
 }) {
   if (!botMember?.id) throw new RulesError('The bot member could not be loaded. Try setup again.');
   if (guild.roles.everyone.permissions.has(Administrator)) {
@@ -51,7 +52,7 @@ export async function buildPermissionPlan(guild, {
   const skippedPrivate = [];
 
   for (const channel of channels.values()) {
-    if (!channel || channel.id === rulesChannelId || channel.isThread?.() || threadTypes.has(channel.type)) continue;
+    if (!channel || channel.id === rulesChannelId || publicChannelIds.includes(channel.id) || channel.isThread?.() || threadTypes.has(channel.type)) continue;
     const publicPermissions = channel.permissionsFor(guild.roles.everyone);
     if (!publicPermissions) {
       throw new RulesError(`Cannot inspect permissions for channel ${channel.id}. Check bot access before trying again.`);

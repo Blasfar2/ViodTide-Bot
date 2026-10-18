@@ -167,8 +167,9 @@ export class RulesService {
     this.reviews = new Map();
   }
 
-  async inspect(guild) {
+  async inspect(guild, { additionalGatedChannelIds = [] } = {}) {
     const state = await this.store.get(guild.id) ?? {};
+    state.gatedChannelIds = [...new Set([...(state.gatedChannelIds ?? []), ...additionalGatedChannelIds])];
     const roles = await guild.roles.fetch();
     const channels = await guild.channels.fetch();
     const botMember = await guild.members.fetchMe({ force: true });
@@ -185,7 +186,7 @@ export class RulesService {
     checkRulesChannel(channel, botMember, role?.id);
     const plan = await buildPermissionPlan(guild, {
       rulesChannelId: channel?.id, verifiedRoleId: role?.id,
-      botMember, gatedChannelIds: state.gatedChannelIds ?? [], channels,
+      botMember, gatedChannelIds: state.gatedChannelIds ?? [], channels, publicChannelIds: state.publicChannelIds ?? [],
     });
     return { guild, state, botMember, role, channel, plan, roles, channels };
   }

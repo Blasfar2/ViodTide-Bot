@@ -10,9 +10,10 @@ async function sendPrivateError(interaction, content) {
   }
 }
 
-export async function handleInteraction(interaction, { commands, guildId, logger, rulesService }) {
+export async function handleInteraction(interaction, { commands, guildId, logger, rulesService, management }) {
   const verification = interaction.isButton?.() && interaction.customId === RULES_AGREE_BUTTON_ID;
-  if (!verification && !interaction.isChatInputCommand()) return;
+  const managedButton = interaction.isButton?.() && /^voidtide:(ticket|close|role|poll):/.test(interaction.customId);
+  if (!verification && !managedButton && !interaction.isChatInputCommand()) return;
 
   try {
     if (!interaction.inGuild() || interaction.guildId !== guildId) {
@@ -22,8 +23,23 @@ export async function handleInteraction(interaction, { commands, guildId, logger
 
     if (verification) {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      const content = await rulesService.verify(interaction);
+      let content = await rulesService.verify(interaction);
+      if (management) {
+        try { await management.run(() => management.afterVerify(interaction)); }
+        catch (error) {
+          logger.error('Verification succeeded, but newcomer label cleanup needs staff review.', error);
+          content += '\nStaff should review your Newcomer label; verification itself succeeded.';
+        }
+      }
       await interaction.editReply({ content, allowedMentions: { parse: [] } });
+      return;
+    }
+
+    if (managedButton) {
+      if (!management) throw new RulesError('Community management is disabled. Ask staff to enable it in the bot configuration.');
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      const result = await management.run(() => management.button(interaction));
+      await interaction.editReply({ ...result, allowedMentions: { parse: [] } });
       return;
     }
 
@@ -33,7 +49,7 @@ export async function handleInteraction(interaction, { commands, guildId, logger
       return;
     }
 
-    await command.execute(interaction, { rulesService });
+    await command.execute(interaction, { rulesService, management });
   } catch (error) {
     logger.error('Could not complete a Discord interaction.', error);
     const content = error instanceof RulesError
