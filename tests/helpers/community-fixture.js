@@ -17,7 +17,8 @@ export async function fixture(t) {
   const roles = new Collection(); const channels = new Collection(); const members = new Collection();
   function role(name, permissions = [], position = 1) {
     const item = { id: next(), name, position, managed: false, editable: true, permissions: new PermissionsBitField(permissions),
-      comparePositionTo(other) { return this.position - other.position; } };
+      comparePositionTo(other) { return this.position - other.position; },
+      async setName(name) { calls.push(['renameRole', this.id, name]); this.name = name; return this; } };
     roles.set(item.id, item); return item;
   }
   const everyone = role('@everyone', [P.ViewChannel, P.SendMessages, P.ReadMessageHistory, P.UseApplicationCommands, P.Connect, P.Speak], 0);
@@ -119,5 +120,5 @@ export async function fixture(t) {
     return request;
   }
   async function setup() { await management.execute(interaction('setup-server')); return management.execute(interaction('setup-server', { confirm: true })); }
-  return { store, guild, client, bot, botRole, owner, ordinary, member, role, addChannel, calls, errors, management, rulesService, interaction, setup };
+  return { directory, store, guild, client, bot, botRole, owner, ordinary, member, role, addChannel, calls, errors, management, rulesService, interaction, setup };
 }

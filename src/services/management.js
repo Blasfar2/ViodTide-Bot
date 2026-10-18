@@ -8,6 +8,9 @@ import { ServerSetup } from './server-setup.js';
 import { AutoFix } from './auto-fix.js';
 import { StreamService } from './stream-service.js';
 import { TicketService } from './ticket-service.js';
+import { ProfileService } from './profile-service.js';
+import { ProfileAdmin } from './profile-admin.js';
+import { SocialNotifications } from './social-notifications.js';
 import { staffRoleIds } from '../config/server-layout.js';
 import { configFor, embed, requirePermission, requireStaff, safeRole, sendOnce, textChannel, UserError } from './management-utils.js';
 
@@ -19,7 +22,11 @@ export class Management {
     this.tickets = new TicketService(shared);
     this.moderation = new ModerationService(shared);
     this.polls = new PollService(shared);
-    this.streams = new StreamService({ ...shared, environment, fetchImpl });
+    this.profiles = new ProfileService(shared);
+    this.notifications = new SocialNotifications({ ...shared, profiles: this.profiles });
+    this.profileAdmin = new ProfileAdmin({ ...shared, profiles: this.profiles, notifications: this.notifications });
+    this.community.profiles = this.profiles;
+    this.streams = new StreamService({ ...shared, notifications: this.notifications, environment, fetchImpl });
     this.setup = new ServerSetup({ ...shared, panels: async (guild, config) => {
       await this.tickets.panel(guild, config); await this.community.rolePanel(guild, config);
     } });
@@ -51,6 +58,7 @@ export class Management {
   }
   async execute(interaction) {
     const name = interaction.commandName;
+    if (name === 'manage-server') return this.profileAdmin.open(interaction);
     if (name === 'auto-fix') return this.autoFix.run(interaction);
     if (['setup-server', 'setup-roles', 'setup-channels'].includes(name)) return this.setup.run(interaction, name.slice(6));
     if (['setup-status', 'channel-status'].includes(name)) { requirePermission(interaction); return this.setup.status(interaction.guild); }

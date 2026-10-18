@@ -34,7 +34,20 @@ npm run deploy:commands
 npm start
 ```
 
-Register commands after updating this release: old staff-account assignment and deletion options were removed. Registration replaces only this application's command list in `DISCORD_GUILD_ID`. It does not configure the server. Leave `npm start` running; use Ctrl+C to stop. `check`, `test` and `commands:preview` work without credentials; `check:config` validates formats without authenticating or printing values.
+Register commands after updating this release to add `/manage-server`. Registration replaces only this application's command list in `DISCORD_GUILD_ID`. It does not configure the server. Leave `npm start` running; use Ctrl+C to stop. `check`, `test` and `commands:preview` work without credentials; `check:config` validates formats without authenticating or printing values.
+
+## Interactive profile panels
+
+Run **`/manage-server` → ⚙️ Setup Panels**, read the private plan, then click **Confirm** or **Cancel**. Existing permissions remain unchanged. The bot creates/reuses:
+
+| Category | Channels |
+| --- | --- |
+| 🎭 CUSTOMIZE YOUR PROFILE | 🎭・choose-your-roles, 🔔・notification-roles, 🌍・choose-country |
+| 🔴 VOIDTIDE LIVE & SOCIALS | 🔴・live-now, ▶️・youtube, 🎵・tiktok, 📸・instagram, 🌐・social-updates |
+
+Members toggle the five community roles, choose multiple platform notification roles, or select one optional country flag. They can remove choices anytime; confirmations are private. Flag roles are visible in Discord; no precise locations or member-to-country records are stored. Purple/cyan panels reuse your saved VOIDTIDE logo and continue working after bot restarts.
+
+The dashboard provides channel/role name modals, notification settings, country controls and panel refresh, all with reviewed confirmation before changes. Existing rules, gaming, welcome, support, levels and staff resources remain. Read the [setup guide, permissions and Discord test checklist](docs/profile-customization.md) before confirming. Base `/setup-server` below remains available; profile setup upgrades its role/live-now destinations without moving them back on later base setup runs.
 
 ## Invite and permissions
 
@@ -110,6 +123,7 @@ After simple setup, `/auto-rule` and `/setup-rules` also preserve existing permi
 | --- | --- |
 | Health | `/ping` |
 | Setup | `/setup-server`, `/setup-roles`, `/setup-channels`, `/auto-fix`; preview then `confirm:true` |
+| Profile management | `/manage-server` — three persistent panels, name modals, country/social settings; Confirm/Cancel |
 | Status | `/setup-status`, `/channel-status` |
 | Rules | `/rules`, `/auto-rule [logo]`, `/setup-rules` |
 | Role panel | `/role-panel` — administrator-only publishing; five public toggle buttons |
@@ -140,7 +154,9 @@ TWITCH_CLIENT_SECRET=
 YOUTUBE_API_KEY=
 ```
 
-Twitch uses an app client-credentials token and lowercase login names. YouTube requires Data API v3 and a 24-character channel ID starting `UC`, not a handle. Configure destinations with `/stream-config`. Checks run every five minutes while the bot runs, up to 20 accounts. YouTube establishes a baseline first and catches up at most the latest 50 items; IDs/checkpoints prevent repeat posts. Provider authentication still requires your live testing. Notifications preserve the existing no-mass-mention delivery behavior; the preference roles do not grant privileges.
+Twitch uses an app client-credentials token and lowercase login names. YouTube requires Data API v3 and a 24-character channel ID starting `UC`, not a handle. Checks run every five minutes while the bot runs, up to 20 accounts. YouTube establishes a baseline first and catches up at most the latest 50 items. Provider authentication needs live testing.
+
+After profile setup, alerts mention only their platform opt-in role, with persistent deduplication and a default five-minute platform cooldown. Configure destinations/enabled status/cooldown through `/manage-server` → **Notification Settings**, then add accounts with `/stream-config` using that same destination. Default destinations are live-now and ▶️・youtube. Existing explicit social settings remain. Without profile setup, existing non-pinging deliveries continue. Discord role pings require the optional channel permission explained in the [profile guide](docs/profile-customization.md); it is never granted automatically. No @everyone/@here/user pings are allowed. TikTok, Instagram and X provide saved role/settings support only; automatic integrations are unavailable. No external subscriptions or paid services are required.
 
 ## Storage, hosting and checks
 

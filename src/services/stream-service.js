@@ -7,8 +7,8 @@ export function validateStream(provider, account) {
   throw new UserError('Use a lowercase Twitch login or a YouTube channel ID beginning UC (24 characters).');
 }
 export class StreamService {
-  constructor({ store, logger, environment = process.env, fetchImpl = globalThis.fetch, clock = Date.now }) {
-    Object.assign(this, { store, logger, environment, fetchImpl, clock }); this.token = null;
+  constructor({ store, logger, notifications, environment = process.env, fetchImpl = globalThis.fetch, clock = Date.now }) {
+    Object.assign(this, { store, logger, notifications, environment, fetchImpl, clock }); this.token = null;
   }
   async request(url, options = {}) {
     const response = await this.fetchImpl(url, { ...options, signal: globalThis.AbortSignal.timeout(15_000) });
@@ -29,6 +29,7 @@ export class StreamService {
     if (action === 'remove') { this.store.delete(interaction.guildId, 'streams', key); return { content: 'Notification account removed.' }; }
     if (this.store.list(interaction.guildId, 'streams').length >= 20 && !this.store.get(interaction.guildId, 'streams', key)) throw new UserError('At most 20 notification accounts are supported per server.');
     const channel = interaction.options.getChannel('channel'); await textChannel(interaction.guild, channel.id);
+    if (configFor(this.store, interaction.guildId).profile?.ready && this.notifications && this.notifications.settings(interaction.guildId, provider).channelId !== channel.id) throw new UserError('Profile alerts use one destination per platform. Set it through /manage-server → Notification Settings first, then select that same channel here.');
     const previous = this.store.get(interaction.guildId, 'streams', key);
     this.store.set(interaction.guildId, 'streams', key, { ...previous, provider, account, channelId: channel.id, revision: (previous?.revision ?? 0) + 1 });
     return { content: 'Notification account saved. Add the required provider credentials securely in environment variables. YouTube establishes a latest-upload baseline on its first check; Twitch can announce an already-live stream.' };
@@ -72,6 +73,7 @@ export class StreamService {
   }
   async tick(guild) {
     for (const { key, value } of this.store.list(guild.id, 'streams')) {
+      if (configFor(this.store, guild.id).profile?.ready && this.notifications?.settings(guild.id, value.provider).enabled === false) continue;
       if (this.clock() - (value.checkedAt ?? 0) < 300_000) continue;
       this.store.set(guild.id, 'streams', key, { ...value, checkedAt: this.clock() });
       try {
@@ -84,8 +86,11 @@ export class StreamService {
         const knownIndex = items.findIndex((item) => item.id === value.lastId);
         const unseen = (knownIndex >= 0 ? items.slice(0, knownIndex) : [...items]).reverse();
         if (value.provider === 'twitch' || value.initialized) for (const item of unseen) {
-          const channel = await textChannel(guild, value.channelId);
-          await sendOnce(this.store, channel, `stream:${key}:${item.id}`, { embeds: [embed(item.title.slice(0, 256), item.description.slice(0, 4096))] });
+          if (this.notifications) await this.notifications.deliver(guild, value.provider, `stream:${key}:${item.id}`, item, value.channelId);
+          else {
+            const channel = await textChannel(guild, value.channelId);
+            await sendOnce(this.store, channel, `stream:${key}:${item.id}`, { embeds: [embed(item.title.slice(0, 256), item.description.slice(0, 4096))] });
+          }
         }
         if (this.store.get(guild.id, 'streams', key)?.revision === value.revision) this.store.set(guild.id, 'streams', key, { ...value, checkedAt: this.clock(), playlist: playlist ?? null, lastId: items[0]?.id ?? value.lastId ?? null, initialized: true, error: false });
       } catch (error) {

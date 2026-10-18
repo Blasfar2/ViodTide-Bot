@@ -14,7 +14,8 @@ export async function handleInteraction(interaction, { commands, guildId, logger
   const verification = interaction.isButton?.() && interaction.customId === RULES_AGREE_BUTTON_ID;
   const retiredChoice = interaction.isButton?.() && interaction.customId === 'voidtide:rules:disagree:v1';
   const managedButton = interaction.isButton?.() && /^voidtide:(ticket|close|role|poll):/.test(interaction.customId);
-  if (!verification && !retiredChoice && !managedButton && !interaction.isChatInputCommand()) return;
+  const profileInteraction = (interaction.isButton?.() || interaction.isStringSelectMenu?.() || interaction.isModalSubmit?.()) && /^voidtide:(profile|manage):/.test(interaction.customId);
+  if (!verification && !retiredChoice && !managedButton && !profileInteraction && !interaction.isChatInputCommand()) return;
 
   try {
     if (!interaction.inGuild() || interaction.guildId !== guildId) {
@@ -24,6 +25,11 @@ export async function handleInteraction(interaction, { commands, guildId, logger
 
     if (retiredChoice) {
       await sendPrivateError(interaction, 'Disagree was removed. Use the current rules panel and ✅ I Agree if you accept the rules.');
+      return;
+    }
+    if (profileInteraction) {
+      if (!management) throw new RulesError('Community management is disabled. Ask staff to enable it in the bot configuration.');
+      await management.run(() => management.profileAdmin.handle(interaction));
       return;
     }
     if (verification) {

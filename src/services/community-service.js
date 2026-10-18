@@ -123,6 +123,7 @@ export class CommunityService {
     return { embeds: [embed('VOIDTIDE • Level Rewards', [5, 10, 20, 30, 50].map((n) => `Level **${n}** — ${config.roles?.[`Level ${n}`] ? `<@&${config.roles[`Level ${n}`]}>` : 'not configured'}`).join('\n'))] };
   }
   async rolePanel(guild, config) {
+    if (config.profile?.ready && this.profiles) return this.profiles.publish(guild);
     const me = await guild.members.fetchMe({ force: true });
     if (!me.permissions.has(P.ManageRoles)) throw new UserError('The bot needs Manage Roles for the role panel.');
     const channel = await textChannel(guild, config.channels['choose-roles']);
@@ -153,7 +154,7 @@ export class CommunityService {
       const member = await interaction.guild.members.fetch({ user: interaction.user.id, force: true });
       if (member.user.bot) throw new UserError('Role selection is for community members, not bots.');
       if (member.pending) throw new UserError('Complete Discord membership screening before choosing roles.');
-      const role = await safeRole(interaction.guild, config.roles?.[choice.name]);
+      const role = config.profile?.ready && this.profiles ? await this.profiles.approvedRole(interaction.guild, config, 'community', choice) : await safeRole(interaction.guild, config.roles?.[choice.name]);
       const removing = member.roles.cache.has(role.id);
       await member.roles[removing ? 'remove' : 'add'](role, 'Member selected a nonprivileged community role');
       return { content: `${choice.emoji} ${choice.name} ${removing ? 'removed' : 'added'}.` };

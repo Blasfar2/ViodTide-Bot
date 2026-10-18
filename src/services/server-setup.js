@@ -48,6 +48,8 @@ export class ServerSetup {
       plannedChannels.push({ name: group, key, category: group, type: ChannelType.GuildCategory, channel: parent, staff: key === 'STAFF' });
       for (const name of names) {
         const key = CHANNEL_KEYS[name]; const type = CATEGORY_KEYS[group] === 'VOICE' ? ChannelType.GuildVoice : ChannelType.GuildText;
+        // The confirmed profile layout owns these destinations. Do not move them back on a legacy setup rerun.
+        if (config.profile?.ready && ['choose-roles', 'live-now'].includes(key)) continue;
         const saved = key === '📜・rules' ? legacy.rulesChannelId ?? config.channels?.[key] : config.channels?.[key];
         const oldPanel = key === 'choose-roles' && saved && channels.get(saved);
         const keepPrivatePanel = oldPanel && !same(oldPanel.name, name) && !oldPanel.permissionsFor(guild.roles.everyone)?.has([P.ViewChannel, P.ReadMessageHistory]);
