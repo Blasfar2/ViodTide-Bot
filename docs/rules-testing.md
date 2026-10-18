@@ -1,4 +1,4 @@
-# Phase 2 rules and verification checklist
+# Rules and verification checklist
 
 Use a disposable development server first. The checkboxes below are manual checks to perform; an unchecked item has not been verified in Discord. Automated checks do not connect to Discord or prove that real server permissions are correct.
 

@@ -84,7 +84,7 @@ test('configuration lists missing variable names without exposing supplied value
 
 test('configuration rejects invalid Discord IDs without echoing the input', () => {
   for (const name of ['DISCORD_CLIENT_ID', 'DISCORD_GUILD_ID']) {
-    for (const invalid of ['secret-test-input', '123', '123456789012345678901', '18446744073709551616']) {
+    for (const invalid of ['secret-test-input', '123', '123456789012345678901', '18446744073709551616', '00000000000000000', '012345678901234567']) {
       assert.throws(() => readConfig({
         DISCORD_TOKEN: config.token,
         DISCORD_CLIENT_ID: config.clientId,

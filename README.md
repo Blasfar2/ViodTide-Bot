@@ -2,7 +2,9 @@
 
 A JavaScript Discord bot for the VOIDTIDE gaming and streaming community, built with **discord.js v14** and **Node.js 24 LTS**.
 
-**Phase 2** adds the VOIDTIDE rules and member verification system to the working `/ping` foundation. Server access changes happen only when an administrator confirms `/setup-rules` after reviewing its preview.
+The current release includes `/ping` and the VOIDTIDE rules and member verification system. Server access changes happen only when an administrator confirms `/setup-rules` after reviewing its preview.
+
+For the expanded server-management plan, see the [Phase 1 foundation review](docs/foundation-audit.md): implemented features, confirmed repairs, missing systems, credential-history audit, and Codespaces verification steps.
 
 The project package is named `voidtide-discord-bot`. The existing checkout is named `ViodTide-Bot`; creating this project does not rename or publish the GitHub repository.
 
@@ -66,7 +68,7 @@ npm ci
 5. Copy the environment template:
 
 ```sh
-cp .env.example .env
+cp -n .env.example .env
 ```
 
 On Windows, you can copy and rename the file in your editor instead. Edit `.env` locally and fill in:
@@ -78,6 +80,14 @@ On Windows, you can copy and rename the file in your editor instead. Edit `.env`
 | `DISCORD_GUILD_ID` | **Copy Server ID** in Discord. |
 
 Leave all three privileged intent switches off. The code loads `.env` through `dotenv`; deployment hosts can supply the same variables directly without a file.
+
+Check your configuration locally before starting the bot:
+
+```sh
+npm run check:config
+```
+
+This validates required values and Discord ID formats without connecting to Discord or printing credentials. Token authentication, installation, and server permissions still need the live checks below.
 
 ## 3. Invite the bot
 
@@ -105,6 +115,8 @@ npm run commands:preview
 ```
 
 `check` runs syntax and lint checks. `test` runs automated tests. `commands:preview` prints the slash-command definitions without sending them to Discord.
+
+GitHub Actions runs these checks and a locked dependency installation on pull requests and pushes to `main`. Its tests use fixtures and require no bot token. It does not start the bot or register commands.
 
 Once `.env` contains the replacement token and correct IDs, register `/ping`, `/rules`, and `/setup-rules`:
 
@@ -155,6 +167,8 @@ When you run `/setup-rules confirm:true`, setup applies these changes:
 
 Existing role or member overrides that allow **View Channel** can bypass a deny for `@everyone`. Setup refuses unsupported conflicting overrides instead of claiming verification is enforced. Review the reported override in Discord and rerun the preview. Setup also refuses ambiguous duplicate channel/role candidates, an age-restricted rules channel, and a `Verified` role with elevated permissions, staff permission grants in a channel, or access to private channels outside the saved verification gates. Resolve these manually; it does not delete existing roles or channels. Role safety and channel access are checked again before each verification role assignment.
 
+A human member-specific View Channel allowance is treated as a conflict even when the member has cached administrator permissions. Human membership caches can be stale without the privileged Members intent. Current administrators already bypass channel restrictions; redundant individual grants should be reviewed manually. The server owner and documented bot exceptions remain supported.
+
 The command is limited to administrators by Discord's default command permissions and checks authorization again when used. The bot itself needs only the permissions listed in the invitation step.
 
 ### Apply and use the rules
@@ -187,7 +201,7 @@ This is a rare administrator recovery procedure, not a normal setup step. If the
 
 If the backup or intended access is unclear, keep the bot stopped while an administrator reconstructs the intended permissions. Do not recover by granting `Verified` access to every channel.
 
-Follow the [Phase 2 test checklist](docs/rules-testing.md) before using this in the community server. Live Discord checks must be performed with your own installation; offline tests cannot verify real channel overrides or role assignment.
+Follow the [rules and verification test checklist](docs/rules-testing.md) before using this in the community server. Live Discord checks must be performed with your own installation; offline tests cannot verify real channel overrides or role assignment.
 
 For development, restart automatically when JavaScript files change:
 
@@ -201,6 +215,7 @@ Stop either mode with **Ctrl+C**. The bot disconnects cleanly. It remains online
 
 ```text
 scripts/
+  check-config.js             # Credential-safe offline configuration validation
   deploy-commands.js          # Preview or register guild commands
 src/
   commands/
@@ -220,7 +235,8 @@ src/
     register-commands.js     # Command registration service
   index.js                   # Bot entry point and shutdown handling
 data/rules.json              # Runtime rules settings (ignored by Git)
-docs/rules-testing.md         # Manual Phase 2 verification checklist
+docs/rules-testing.md         # Manual rules and verification checklist
+docs/foundation-audit.md      # Expanded-roadmap Phase 1 findings and verification
 .env.example                 # Safe configuration template
 .nvmrc                       # Node.js major version
 package.json                 # Dependencies and npm scripts
@@ -253,8 +269,8 @@ discord.js handles Discord REST rate-limit queues. Avoid repeatedly redeploying 
 
 ## Later phases
 
-Rules and verification are implemented in Phase 2. Future work includes announcements and scheduling, XP and reward roles, tickets and logs, full channel and role setup, welcome/goodbye messages, moderation and anti-spam, Twitch/YouTube notifications, and interactive polls. These systems are not implemented in this phase.
+Rules and verification are already implemented. The expanded roadmap starts with the foundation review linked above, followed by safe combined server/channel/role setup, welcome and announcements, XP, tickets, moderation, streaming/polls/events, and a final permission audit. Those additional systems remain unimplemented in this foundation phase.
 
-The planned server structure includes **Information**, **Community**, **Gaming**, **Streaming**, **Support**, and **Staff** categories, plus an accessible text channel for deaf and hard-of-hearing members. Setup commands will not run until those features are implemented and explicitly used.
+The planned server structure includes **START HERE**, **COMMUNITY**, **GAMING**, **VOIDTIDE STREAMS**, **SUPPORT**, **VOICE**, and private **STAFF** categories, including a **sign-language** text channel for Deaf, hard-of-hearing, and hearing members. Full setup commands will be added in later phases and require an explicit reviewed confirmation.
 
-Community team: **VOIDTIDE** and **Badr** — Founders; **Yacin**, **Nisrine**, and **Mehdi** — Co-Founders; **VoidToid Bot** — Bots. Later role assignment will use Discord member IDs rather than relying on display names.
+Planned team: **Badr** — Founder; **Yacin**, **Nisrine**, and **Mehdi** — Co-Founders. These names are documentation only. Privileged role assignments must use Discord user IDs selected and confirmed by the server owner; display names will never trigger an assignment.

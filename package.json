@@ -2,7 +2,7 @@
   "name": "voidtide-discord-bot",
   "version": "0.1.0",
   "private": true,
-  "description": "VOIDTIDE Bot — Phase 1 Discord bot foundation",
+  "description": "VOIDTIDE community bot with rules and member verification",
   "type": "module",
   "license": "Apache-2.0",
   "engines": {
@@ -14,6 +14,7 @@
     "deploy:commands": "node scripts/deploy-commands.js",
     "commands:preview": "node scripts/deploy-commands.js --dry-run",
     "check": "eslint .",
+    "check:config": "node scripts/check-config.js",
     "test": "node --test"
   },
   "dependencies": {
