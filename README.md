@@ -86,7 +86,9 @@ In Discord:
 
 1. Run `/auto-fix` and read the private JSON preview. It lists missing categories/channels/roles, canonical names, channel moves, conflicts, and staff permission changes.
 2. Run `/auto-fix confirm:true` to apply that exact plan within ten minutes. Incompatible resources and duplicate names are renamed with an `-archived-ID` suffix; their channels and messages remain. Missing correct resources are created, saved names are restored, and managed channels are moved into the standard categories without synchronizing their permissions. Unrelated channels are preserved.
-3. Run `/auto-rule`. Review its verification permission preview, then run `/auto-rule confirm:true`. It publishes or updates one approved rules embed with **✅ I Agree**, creates/reuses Verified, and gates community access. Welcome/rules remain available to newcomers after a completed auto-fix. Agree assigns Verified; staff channels remain private.
+3. Run `/auto-rule logo:` and select your VOIDTIDE image in Discord's attachment picker (PNG/JPEG/WebP, up to 5 MiB). Review its verification permission preview, then run `/auto-rule confirm:true` without attaching the image again. It publishes **three separate messages, in order**: the logo, the welcome and rules 01–10, then violations/agreement with a green **✅ I Agree** button. Approved wording stays unchanged. It creates/reuses Verified and gates community access. Welcome/rules remain available to newcomers after a completed auto-fix. Agree assigns Verified; staff channels remain private.
+
+Later `/auto-rule` runs reuse your saved logo; without an uploaded logo it uses the bot's avatar and says so in the preview. The logo is uploaded as an attachment **by your bot**, followed by two styled embeds; no webhook or external image-hosting service is used. Download access to Discord's attachment CDN is needed once when selecting a new logo. The bot saves the image under ignored `data/rules-assets/`; back it up with the other runtime data. Existing bot rules messages are edited/reused as the three slots, including migration from the earlier single embed, so reruns do not flood the channel. `/rules` remains a private full-text view. Once selected, the three-message layout is preserved by later normal setup runs.
 
 **Optional permanent deletion:** `/auto-fix delete_conflicts:true` previews deleting eligible conflicting channels instead of archiving them. Only confirm using `/auto-fix confirm:true delete_conflicts:true` after reviewing the exact IDs. **Deletion permanently removes messages and threads.** Saved/referenced channels, Discord-designated system channels, and categories with children are archived instead. Unrelated resources are never deletion targets. This does not delete every channel outside the template.
 
@@ -129,7 +131,7 @@ Important rules, event details, schedules, and notices are available in text. Vo
 | --- | --- |
 | Health | `/ping` |
 | Setup | `/setup-server`, `/setup-roles`, `/setup-channels` — preview first, then `confirm:true`; `/setup-status`, `/channel-status` |
-| Rules | `/rules`; `/setup-rules` with its own administrator preview/confirmation; **✅ I Agree** assigns Verified |
+| Rules | `/rules`; `/auto-rule logo:` publishes logo → rules → agreement; `/setup-rules` retains the selected layout; administrator preview/confirmation; **✅ I Agree** assigns Verified |
 | Announcements | `/announce title description [image] [link]`; staff-only, no mass mentions |
 | Scheduling | `/schedule-announcement create time title description [image] [link]`; `list`; `cancel id` |
 | Levels | `/rank [member]`, `/leaderboard`, `/level-rewards`; `/xp-admin member xp` sets a total and reconciles reward roles |
@@ -175,6 +177,10 @@ YOUTUBE_API_KEY=
 - Outbound HTTPS is needed for `id.twitch.tv`, `api.twitch.tv`, and `www.googleapis.com`. Bot login also needs Discord HTTPS and secure gateway WebSockets. No live provider calls were made during offline testing.
 
 **There is no 24/7 monitoring guarantee.** A sleeping/stopped/deleted Codespace stops polling and gateway events. A continuously running host is required for continuous operation; no Replit or paid service is introduced by this project.
+
+**Your PC can be turned off while an active Codespace runs the bot.** A Codespace is a cloud machine; it still stops after its configured idle timeout or when its usage allowance runs out. Keeping a browser tab open does not guarantee continuous operation. No keep-alive bypass is included.
+
+**Posted rules and logo remain visible when the bot is offline. The custom Agree button needs the bot running to assign Verified.** Discord does not run your JavaScript inside the message. For rules acceptance that works while your bot is stopped, see [Discord's built-in Rules Screening](docs/offline-rules.md). It does not assign the custom Verified role or unlock this bot's Verified gates. This update does not change those gates to a different verification system.
 
 ## Persistence, recovery, and hosting
 

@@ -23,7 +23,7 @@ export async function fixture(t) {
   const everyone = role('@everyone', [P.ViewChannel, P.SendMessages, P.ReadMessageHistory, P.UseApplicationCommands, P.Connect, P.Speak], 0);
   const botRole = role('bot', BOT_PERMISSIONS, 100);
   const ownerRole = role('owner', [P.Administrator], 99);
-  const client = { user: { id: next() }, isReady: () => true, guilds: { cache: new Collection() } };
+  const client = { user: { id: next(), displayAvatarURL: () => 'https://cdn.discordapp.com/embed/avatars/0.png' }, isReady: () => true, guilds: { cache: new Collection() } };
   const guild = { id: everyone.id, ownerId: next(), client, memberCount: 3,
     roles: { cache: roles, everyone, async fetch(id) { return id ? roles.get(id) ?? null : roles; }, async create(options) { calls.push(['role', options]); return role(options.name, options.permissions); } },
     channels: { cache: channels, async fetch(id) { return id ? channels.get(id) ?? null : channels; }, async create(options) { calls.push(['channel', options]); return addChannel(options.name, options); } },

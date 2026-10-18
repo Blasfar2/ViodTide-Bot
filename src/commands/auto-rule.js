@@ -6,14 +6,16 @@ export const autoRule = {
   data: new SlashCommandBuilder().setName('auto-rule')
     .setDescription('Publish approved VOIDTIDE rules and I Agree verification after permission preview')
     .setDefaultMemberPermissions(P.Administrator)
-    .addBooleanOption((o) => o.setName('confirm').setDescription('Apply the rules permission preview you reviewed in the last ten minutes')),
+    .addBooleanOption((o) => o.setName('confirm').setDescription('Apply the rules permission preview you reviewed in the last ten minutes'))
+    .addAttachmentOption((o) => o.setName('logo').setDescription('Your VOIDTIDE logo as PNG, JPEG or WebP, up to 5 MiB; attach during preview')),
   async execute(interaction, { rulesService, management }) {
     if (!interaction.memberPermissions?.has(P.Administrator)) throw new RulesError('Only server administrators can run /auto-rule.');
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const execute = async () => {
       if (interaction.options.getBoolean('confirm') !== true) {
-        return (await rulesService.preview(interaction.guild, interaction.user.id)).replaceAll('/setup-rules', '/auto-rule');
+        return (await rulesService.preview(interaction.guild, interaction.user.id, { layout: 'split', logo: interaction.options.getAttachment?.('logo') ?? undefined })).replaceAll('/setup-rules', '/auto-rule');
       }
+      if (interaction.options.getAttachment?.('logo')) throw new RulesError('Attach the logo during /auto-rule preview, then confirm without attaching it again.');
       const content = await rulesService.setup(interaction.guild, interaction.user.id);
       if (management) {
         const state = await rulesService.store.get(interaction.guildId);

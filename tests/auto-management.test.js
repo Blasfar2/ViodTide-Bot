@@ -5,7 +5,7 @@ import { getCommandDefinitions } from '../src/commands/index.js';
 import { autoRule } from '../src/commands/auto-rule.js';
 import { configFor } from '../src/services/management-utils.js';
 import { RULES_TEXT } from '../src/config/rules-text.js';
-import { RULES_AGREE_BUTTON_ID } from '../src/services/rules-payload.js';
+import { RULES_AGREE_BUTTON_ID, RULES_MAIN_TEXT, RULES_AGREEMENT_TEXT } from '../src/services/rules-payload.js';
 import { fixture } from './helpers/community-fixture.js';
 
 function rulesRequest(f, confirm = false, actor = f.owner) {
@@ -157,7 +157,11 @@ test('auto-rule publishes exact rules and one working Agree panel after auto-fix
   assert.equal(channel.messages.cache.size, 0);
   await autoRule.execute(rulesRequest(f, true), { rulesService: f.rulesService, management: f.management });
   state = await f.rulesService.store.get(f.guild.id); const message = channel.messages.cache.get(state.rulesMessageId);
-  assert.equal(message.embeds[0].description, RULES_TEXT); assert.equal(message.components[0].components[0].customId, RULES_AGREE_BUTTON_ID);
+  const body = channel.messages.cache.get(state.rulesSequence.body);
+  assert.equal(body.embeds[0].description, RULES_MAIN_TEXT);
+  assert.equal(message.embeds[0].description, RULES_AGREEMENT_TEXT);
+  assert.equal(`${body.embeds[0].description}\n${message.embeds[0].description}`, RULES_TEXT);
+  assert.equal(message.components[0].components[0].customId, RULES_AGREE_BUTTON_ID);
   assert.equal(channel.permissionsFor(f.ordinary).has(P.ViewChannel), true);
   const config = configFor(f.store, f.guild.id);
   assert.equal(f.guild.channels.cache.get(config.channels.welcome).permissionsFor(f.ordinary).has(P.ViewChannel), true);
@@ -167,7 +171,7 @@ test('auto-rule publishes exact rules and one working Agree panel after auto-fix
   assert.equal(f.guild.channels.cache.get(config.channels.general).permissionsFor(f.ordinary).has(P.ViewChannel), true);
   assert.equal(f.guild.channels.cache.get(config.channels['staff-chat']).permissionsFor(f.ordinary).has(P.ViewChannel), false);
   await autoRule.execute(rulesRequest(f), { rulesService: f.rulesService, management: f.management });
-  await autoRule.execute(rulesRequest(f, true), { rulesService: f.rulesService, management: f.management }); assert.equal(channel.messages.cache.size, 1);
+  await autoRule.execute(rulesRequest(f, true), { rulesService: f.rulesService, management: f.management }); assert.equal(channel.messages.cache.size, 3);
 });
 
 test('auto-rule rejects ordinary members and also works without community services', async (t) => {
