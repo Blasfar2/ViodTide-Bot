@@ -35,6 +35,8 @@ In the [Discord Developer Portal](https://discord.com/developers/applications), 
 
 For larger/verified applications Discord may require approval for privileged intents. If the application is not approved, keep `ENABLE_COMMUNITY=false`; the original `/ping`, `/rules`, and `/setup-rules` foundation remains available. New management commands explain that community services are disabled. Enabling the variable alone does not enable intents in the Developer Portal.
 
+If command registration succeeds but `npm start` exits with a gateway error, check these intent switches first. Command registration uses Discord's HTTP API; the gateway separately checks permission to use privileged intents. A `4014` diagnostic means Discord rejected those intents. Save both switches for the same application as `DISCORD_CLIENT_ID`, then rerun `npm start`; command registration does not need to be repeated. If it still fails, share the sanitized error line, never your `.env` or token.
+
 ## 3. Invite permissions — read before setup
 
 The full bot needs **View Channels**, **Send Messages**, **Embed Links**, **Attach Files**, **Read Message History**, **Manage Channels**, **Manage Roles**, **Manage Messages**, **Moderate Members**, **Kick Members**, **Ban Members**, and **Manage Events**. It does **not** need Administrator.

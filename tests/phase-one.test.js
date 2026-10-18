@@ -275,6 +275,34 @@ test('safe logging retains recognized codes and excludes error bodies, messages,
   assert.equal(lines.some((line) => line.includes(config.token) || line.includes('private-test')), false);
 });
 
+test('gateway errors without codes produce safe, actionable startup guidance', () => {
+  const lines = [];
+  const logger = createLogger({ error: (line) => lines.push(line) });
+  for (const error of [
+    new Error('Used disallowed intents'),
+    { code: 4014 },
+    { code: 'DisallowedIntents' },
+    { code: 'UsedDisallowedIntents' },
+  ]) {
+    logger.error('Discord gateway connection error.', error);
+    assert.match(lines.at(-1), /Server Members Intent and Message Content Intent/);
+    assert.match(lines.at(-1), /ENABLE_COMMUNITY=false/);
+  }
+  logger.error('Discord gateway connection error.', new Error('Authentication failed'));
+  assert.match(lines.at(-1), /4004.*DISCORD_TOKEN/);
+  logger.error('Discord gateway connection error.', new Error('Used invalid intents'));
+  assert.match(lines.at(-1), /4013.*client intent configuration/);
+});
+
+test('gateway diagnostics never echo unknown messages or partial matches', () => {
+  const lines = [];
+  const logger = createLogger({ error: (line) => lines.push(line) });
+  for (const message of [config.token, `Used disallowed intents ${config.token}`]) {
+    logger.error('Discord gateway connection error.', new Error(message));
+    assert.doesNotMatch(lines.at(-1), /test-only-token|4014|Server Members Intent/);
+  }
+});
+
 function runNode(relativePath, arguments_ = []) {
   return spawnSync(process.execPath, [fileURLToPath(new URL(relativePath, import.meta.url)), ...arguments_], {
     cwd: fileURLToPath(new URL('../', import.meta.url)),
