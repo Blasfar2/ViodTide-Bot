@@ -17,13 +17,14 @@ export async function fixture(t) {
   const roles = new Collection(); const channels = new Collection(); const members = new Collection();
   function role(name, permissions = [], position = 1) {
     const item = { id: next(), name, position, managed: false, editable: true, permissions: new PermissionsBitField(permissions),
-      comparePositionTo(other) { return this.position - other.position; } };
+      comparePositionTo(other) { return this.position - other.position; },
+      async setName(name) { calls.push(['renameRole', this.id, name]); this.name = name; return this; } };
     roles.set(item.id, item); return item;
   }
   const everyone = role('@everyone', [P.ViewChannel, P.SendMessages, P.ReadMessageHistory, P.UseApplicationCommands, P.Connect, P.Speak], 0);
   const botRole = role('bot', BOT_PERMISSIONS, 100);
   const ownerRole = role('owner', [P.Administrator], 99);
-  const client = { user: { id: next() }, isReady: () => true, guilds: { cache: new Collection() } };
+  const client = { user: { id: next(), displayAvatarURL: () => 'https://cdn.discordapp.com/embed/avatars/0.png' }, isReady: () => true, guilds: { cache: new Collection() } };
   const guild = { id: everyone.id, ownerId: next(), client, memberCount: 3,
     roles: { cache: roles, everyone, async fetch(id) { return id ? roles.get(id) ?? null : roles; }, async create(options) { calls.push(['role', options]); return role(options.name, options.permissions); } },
     channels: { cache: channels, async fetch(id) { return id ? channels.get(id) ?? null : channels; }, async create(options) { calls.push(['channel', options]); return addChannel(options.name, options); } },
@@ -94,6 +95,7 @@ export async function fixture(t) {
       },
       async setParent(parent) { calls.push(['parent', channel.id]); this.parentId = parent; },
       async setName(name) { calls.push(['rename', channel.id]); this.name = name; },
+      async delete() { calls.push(['deleteChannel', channel.id]); channels.delete(channel.id); return this; },
       async bulkDelete(collection) { for (const id of collection.keys()) messages.delete(id); calls.push(['bulkDelete', collection.size]); return collection; },
     };
     channels.set(channel.id, channel); return channel;
@@ -118,5 +120,5 @@ export async function fixture(t) {
     return request;
   }
   async function setup() { await management.execute(interaction('setup-server')); return management.execute(interaction('setup-server', { confirm: true })); }
-  return { store, guild, client, bot, botRole, owner, ordinary, member, role, addChannel, calls, errors, management, rulesService, interaction, setup };
+  return { directory, store, guild, client, bot, botRole, owner, ordinary, member, role, addChannel, calls, errors, management, rulesService, interaction, setup };
 }

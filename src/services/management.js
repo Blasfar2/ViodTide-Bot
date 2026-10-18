@@ -5,9 +5,13 @@ import { CommunityService } from './community-service.js';
 import { ModerationService } from './moderation-service.js';
 import { PollService } from './poll-service.js';
 import { ServerSetup } from './server-setup.js';
+import { AutoFix } from './auto-fix.js';
 import { StreamService } from './stream-service.js';
 import { TicketService } from './ticket-service.js';
-import { STAFF_ROLES } from '../config/server-layout.js';
+import { ProfileService } from './profile-service.js';
+import { ProfileAdmin } from './profile-admin.js';
+import { SocialNotifications } from './social-notifications.js';
+import { staffRoleIds } from '../config/server-layout.js';
 import { configFor, embed, requirePermission, requireStaff, safeRole, sendOnce, textChannel, UserError } from './management-utils.js';
 
 export class Management {
@@ -18,11 +22,15 @@ export class Management {
     this.tickets = new TicketService(shared);
     this.moderation = new ModerationService(shared);
     this.polls = new PollService(shared);
-    this.streams = new StreamService({ ...shared, environment, fetchImpl });
+    this.profiles = new ProfileService(shared);
+    this.notifications = new SocialNotifications({ ...shared, profiles: this.profiles });
+    this.profileAdmin = new ProfileAdmin({ ...shared, profiles: this.profiles, notifications: this.notifications });
+    this.community.profiles = this.profiles;
+    this.streams = new StreamService({ ...shared, notifications: this.notifications, environment, fetchImpl });
     this.setup = new ServerSetup({ ...shared, panels: async (guild, config) => {
       await this.tickets.panel(guild, config); await this.community.rolePanel(guild, config);
-      await sendOnce(store, await textChannel(guild, config.channels['level-rewards']), 'panel:level-rewards', await this.community.levelRewards({ guildId: guild.id }), { edit: true });
     } });
+    this.autoFix = new AutoFix({ ...shared, setup: this.setup });
     this.running = false;
     this.active = new Set(); this.stopping = false;
   }
@@ -41,7 +49,7 @@ export class Management {
     const verifiedRole = roles.get(config.roles?.Verified);
     if (channel.permissionsFor(guild.roles.everyone).has(P.ViewChannel)
       || (verifiedRole && channel.permissionsFor(verifiedRole).has(P.ViewChannel))) throw new UserError('The log channel is not private. No confidential log was posted.');
-    const staff = STAFF_ROLES.map((name) => config.roles?.[name]);
+    const staff = staffRoleIds(roles, guild.id);
     for (const overwrite of channel.permissionOverwrites.cache.values()) {
       if (overwrite.allow.has(P.ViewChannel, false) && ![guild.client.user.id, guild.ownerId, ...staff].includes(overwrite.id)
         && !roles.get(overwrite.id)?.permissions.has(P.Administrator)) throw new UserError('The log channel has an unrelated access grant. Staff must review it.');
@@ -50,6 +58,8 @@ export class Management {
   }
   async execute(interaction) {
     const name = interaction.commandName;
+    if (name === 'manage-server') return this.profileAdmin.open(interaction);
+    if (name === 'auto-fix') return this.autoFix.run(interaction);
     if (['setup-server', 'setup-roles', 'setup-channels'].includes(name)) return this.setup.run(interaction, name.slice(6));
     if (['setup-status', 'channel-status'].includes(name)) { requirePermission(interaction); return this.setup.status(interaction.guild); }
     if (name === 'announce') return this.community.announce(interaction);

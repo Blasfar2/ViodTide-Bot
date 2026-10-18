@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { PermissionFlagsBits as P } from 'discord.js';
+import { ChannelType, PermissionFlagsBits as P } from 'discord.js';
 import { Store } from '../src/database/store.js';
 import { getCommandDefinitions } from '../src/commands/index.js';
 import { configFor, embed, futureTime, sendOnce, UserError } from '../src/services/management-utils.js';
@@ -45,21 +45,23 @@ test('setup preview has no Discord mutations and requires a matching confirmed a
   assert.deepEqual(f.calls, []);
 });
 
-test('full setup is idempotent, preserves private staff, and keeps rules and welcome public', async (t) => {
+test('full setup is idempotent, creates no welcome channel, and keeps staff private', async (t) => {
   const f = await fixture(t); await f.setup();
   const config = configFor(f.store, f.guild.id);
   assert.equal(config.complete, true);
   assert.equal(config.xpEnabled, true);
   const baseline = [f.guild.roles.cache.size, f.guild.channels.cache.size, f.calls.filter(([type]) => type === 'send').length];
   const newcomer = f.ordinary;
-  for (const name of ['welcome', '📜・rules']) assert.equal(f.guild.channels.cache.get(config.channels[name]).permissionsFor(newcomer).has(P.ViewChannel), true, name);
-  for (const name of ['general', 'staff-chat', 'mod-logs', 'ticket-logs']) assert.equal(f.guild.channels.cache.get(config.channels[name]).permissionsFor(newcomer).has(P.ViewChannel), false, name);
+  assert.equal(config.channels.welcome, undefined); assert.equal(config.welcomeEnabled, false);
+  for (const name of ['📜・rules', 'general', 'choose-roles']) assert.equal(f.guild.channels.cache.get(config.channels[name]).permissionsFor(newcomer).has(P.ViewChannel), true, name);
+  for (const name of ['staff-chat', 'mod-logs', 'ticket-logs']) assert.equal(f.guild.channels.cache.get(config.channels[name]).permissionsFor(newcomer).has(P.ViewChannel), false, name);
   await newcomer.roles.add(config.roles.Verified);
   assert.equal(f.guild.channels.cache.get(config.channels.general).permissionsFor(newcomer).has(P.ViewChannel), true);
   assert.equal(f.guild.channels.cache.get(config.channels['staff-chat']).permissionsFor(newcomer).has(P.ViewChannel), false);
   await f.setup();
   assert.deepEqual([f.guild.roles.cache.size, f.guild.channels.cache.size, f.calls.filter(([type]) => type === 'send').length], baseline);
-  assert.ok(config.channels['sign-language']);
+  assert.ok(config.roles['Sign Language']);
+  assert.match(f.guild.channels.cache.get(config.channels['gaming-chat']).topic, /Deaf, hard-of-hearing/);
 });
 
 test('public staff channels, duplicate resources, and unsafe existing roles stop setup before mutation', async (t) => {
@@ -67,22 +69,82 @@ test('public staff channels, duplicate resources, and unsafe existing roles stop
     const f = await fixture(t);
     if (type === 'staff') f.addChannel('staff-chat');
     if (type === 'duplicate') { f.role('Verified'); f.role('Verified'); }
-    if (type === 'role') f.role('VIP', [P.Administrator]);
+    if (type === 'role') f.role('Gamer', [P.Administrator]);
     await assert.rejects(f.management.execute(f.interaction('setup-server')), UserError);
     assert.deepEqual(f.calls, []);
   }
 });
 
-test('only owner-selected confirmed IDs receive team roles', async (t) => {
+test('setup separates same-named categories and channels and remains idempotent', async (t) => {
+  const f = await fixture(t);
+  const text = f.addChannel('gaming');
+  const voice = f.addChannel('GAMING', { type: ChannelType.GuildVoice });
+  const category = f.addChannel('general', { type: ChannelType.GuildCategory });
+  const message = await text.send({ content: 'Existing gaming conversation' });
+  f.calls.length = 0;
+  const preview = await f.management.execute(f.interaction('setup-server'));
+  const detail = JSON.parse(preview.files[0].attachment.toString());
+  assert.deepEqual(f.calls, []);
+  assert.equal(detail.existingPermissionsChanged, false);
+  assert.equal(detail.channels.find((c) => c.name === "🎮 LET'S PLAY").id, null);
+  await f.management.execute(f.interaction('setup-server', { confirm: true }));
+  const config = configFor(f.store, f.guild.id);
+  assert.equal(f.guild.channels.cache.get(config.categories.GAMING).type, ChannelType.GuildCategory);
+  assert.equal(f.guild.channels.cache.get(config.channels.general).type, ChannelType.GuildText);
+  assert.equal(text.type, ChannelType.GuildText); assert.equal(text.name, 'gaming');
+  assert.equal(voice.type, ChannelType.GuildVoice); assert.equal(category.type, ChannelType.GuildCategory);
+  assert.equal(text.messages.cache.get(message.id).content, 'Existing gaming conversation');
+  assert.equal(f.calls.some(([kind]) => kind === 'rename'), false);
+  const count = f.guild.channels.cache.size;
+  await f.setup();
+  assert.equal(f.guild.channels.cache.size, count);
+  assert.equal(configFor(f.store, f.guild.id).categories.GAMING, config.categories.GAMING);
+});
+
+test('multiple matching categories remain ambiguous even beside a same-named channel', async (t) => {
+  const f = await fixture(t);
+  f.addChannel('gaming');
+  f.addChannel('GAMING', { type: ChannelType.GuildCategory });
+  f.addChannel('gaming', { type: ChannelType.GuildCategory });
+  await assert.rejects(f.management.execute(f.interaction('setup-server')), /Duplicate candidates/);
+  assert.deepEqual(f.calls, []);
+});
+
+test('a saved category of the wrong type is never silently replaced', async (t) => {
+  const f = await fixture(t); const text = f.addChannel('gaming');
+  f.addChannel('GAMING', { type: ChannelType.GuildCategory });
+  f.store.set(f.guild.id, 'config', 'server', { categories: { GAMING: text.id } });
+  await assert.rejects(f.management.execute(f.interaction('setup-server')), (error) => {
+    assert.ok(error instanceof UserError);
+    assert.match(error.message, /GuildText; expected GuildCategory/);
+    assert.ok(error.message.includes(text.id));
+    assert.match(error.message, /saved configuration/);
+    return true;
+  });
+  assert.deepEqual(f.calls, []);
+});
+
+test('incompatible voice channels cannot replace required text channels', async (t) => {
+  const f = await fixture(t); const voice = f.addChannel('gaming-chat', { type: ChannelType.GuildVoice });
+  await assert.rejects(f.management.execute(f.interaction('setup-server')), (error) => {
+    assert.match(error.message, /GuildVoice; expected GuildText/);
+    assert.ok(error.message.includes(voice.id));
+    return true;
+  });
+  assert.deepEqual(f.calls, []);
+});
+
+test('automatic privileged member assignments are rejected even for the owner', async (t) => {
   const f = await fixture(t);
   const selection = f.member();
   const admin = f.member(undefined, [f.role('Other administrator', [P.Administrator])]);
-  await assert.rejects(f.management.execute(f.interaction('setup-roles', { badr: selection.user }, admin)), /server owner/);
-  await f.management.execute(f.interaction('setup-roles', { badr: selection.user }));
+  await assert.rejects(f.management.execute(f.interaction('setup-roles', { badr: selection.user }, admin)), /assignments were removed/);
+  await assert.rejects(f.management.execute(f.interaction('setup-roles', { badr: selection.user })), /assignments were removed/);
   assert.equal(f.calls.filter(([kind]) => kind === 'addRole').length, 0);
-  await f.management.execute(f.interaction('setup-roles', { badr: selection.user, confirm: true }));
-  const role = f.guild.roles.cache.get(configFor(f.store, f.guild.id).roles['VOIDTIDE Founder']);
-  assert.equal(selection.roles.cache.has(role.id), true); assert.equal(role.permissions.has(P.Administrator), false);
+  await f.management.execute(f.interaction('setup-roles'));
+  await f.management.execute(f.interaction('setup-roles', { confirm: true }));
+  assert.equal(f.calls.some(([kind]) => kind === 'addRole'), false);
+  assert.ok(f.calls.filter(([kind]) => kind === 'role').every(([, options]) => options.permissions.length === 0));
 });
 
 test('send recovery finds an existing bot panel after a lost local delivery record', async (t) => {
@@ -114,14 +176,14 @@ test('tickets are private, duplicate requests reuse one channel, and closing arc
 test('self-assignable roles cannot grant privileged or private-channel permissions', async (t) => {
   const f = await fixture(t); await f.setup(); const config = configFor(f.store, f.guild.id);
   await f.ordinary.roles.add(config.roles.Verified);
-  const saved = f.store.get(f.guild.id, 'deliveries', 'panel:roles');
+  const saved = f.store.get(f.guild.id, 'deliveries', 'panel:roles:v2');
   const request = f.interaction('role-panel', { channelId: saved.channelId, message: { id: saved.messageId } }, f.ordinary);
-  await f.management.community.toggleRole(request, 'VIP');
-  assert.equal(f.ordinary.roles.cache.has(config.roles.VIP), true);
-  await f.management.community.toggleRole(request, 'VIP');
-  assert.equal(f.ordinary.roles.cache.has(config.roles.VIP), false);
-  f.guild.roles.cache.get(config.roles.VIP).permissions.add(P.ManageRoles);
-  await assert.rejects(f.management.community.toggleRole(request, 'VIP'), /privileges/);
+  await f.management.community.toggleRole(request, 'gamer');
+  assert.equal(f.ordinary.roles.cache.has(config.roles.Gamer), true);
+  await f.management.community.toggleRole(request, 'gamer');
+  assert.equal(f.ordinary.roles.cache.has(config.roles.Gamer), false);
+  f.guild.roles.cache.get(config.roles.Gamer).permissions.add(P.ManageRoles);
+  await assert.rejects(f.management.community.toggleRole(request, 'gamer'), /privileges/);
 });
 
 test('XP eligibility rejects short, repeated, and cooldown-farmed content and has deterministic levels', () => {

@@ -41,11 +41,13 @@ export async function textChannel(guild, id, permissions = [P.ViewChannel, P.Sen
   if (!channel?.isTextBased() || channel.isThread?.() || !channel.permissionsFor(me)?.has(permissions)) throw new UserError('The configured channel is unavailable or the bot lacks its required channel permissions.');
   return channel;
 }
-export async function safeRole(guild, roleId) {
-  const role = await guild.roles.fetch(roleId, { force: true });
-  const me = await guild.members.fetchMe({ force: true });
+export async function safeRole(guild, roleId, snapshot) {
+  if (!roleId) throw new UserError('This member role is not configured. Ask staff to set up the panels.');
+  const role = snapshot ? snapshot.roles.get(roleId) : await guild.roles.fetch(roleId, { force: true });
+  const me = snapshot?.me ?? await guild.members.fetchMe({ force: true });
+  if (!me.permissions.has(P.ManageRoles)) throw new UserError('The bot needs Manage Roles to assign or remove member roles.');
   if (!role || role.managed || !role.editable || me.roles.highest.comparePositionTo(role) <= 0 || role.permissions.bitfield !== 0n) throw new UserError('This member role must be below the bot, unmanaged, and have no server-wide privileges.');
-  const channels = await guild.channels.fetch();
+  const channels = snapshot?.channels ?? await guild.channels.fetch();
   if ([...channels.values()].some((channel) => (channel.permissionOverwrites?.cache.get(roleId)?.allow.bitfield ?? 0n) !== 0n)) throw new UserError('This role has channel permission grants and cannot be self-assigned or used as an XP reward.');
   return role;
 }

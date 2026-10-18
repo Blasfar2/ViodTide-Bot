@@ -1,6 +1,7 @@
 import { ping } from './ping.js';
 import { rules } from './rules.js';
 import { setupRules } from './setup-rules.js';
+import { autoRule } from './auto-rule.js';
 import { managementCommands } from './management.js';
 
 // Keep one registry for both execution and slash-command registration.
@@ -9,6 +10,7 @@ export const commands = new Map([
   [ping.data.name, ping],
   [rules.data.name, rules],
   [setupRules.data.name, setupRules],
+  [autoRule.data.name, autoRule],
   ...managementCommands.map((command) => [command.data.name, command]),
 ]);
 

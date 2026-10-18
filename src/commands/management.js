@@ -25,8 +25,10 @@ function announcement(data) {
 for (const name of ['server', 'roles', 'channels']) {
   const data = command(`setup-${name}`, `Preview and confirm safe VOIDTIDE ${name} setup`, P.Administrator);
   data.addBooleanOption((o) => o.setName('confirm').setDescription('Apply a matching preview from the last ten minutes'));
-  for (const person of ['badr', 'yacin', 'nisrine', 'mehdi']) user(data, person, false);
 }
+command('auto-fix', 'Preview simple setup; preserves existing channels and permissions', P.Administrator)
+  .addBooleanOption((o) => o.setName('confirm').setDescription('Apply your matching setup preview from the last ten minutes'));
+command('manage-server', 'Manage profile panels, safe role/channel names and opt-in alerts', P.Administrator);
 command('setup-status', 'Show configured services and missing saved resources', P.Administrator);
 command('channel-status', 'Inspect configured channel IDs and readiness', P.Administrator);
 announcement(command('announce', 'Publish a staff announcement without mass mentions', P.ManageMessages));

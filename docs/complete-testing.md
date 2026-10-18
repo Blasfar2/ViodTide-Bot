@@ -17,24 +17,24 @@ Unchecked boxes are manual tests, not claims of live verification. Use a disposa
 - [ ] Record the existing categories, channels, role memberships, and permission overwrites. Keep an administrator account available for recovery.
 - [ ] An ordinary member cannot run setup/status/XP-admin/provider configuration commands, including if command visibility has been customized.
 - [ ] `/setup-server` is a private preview with an attached complete JSON plan. No Discord resource or permission changes occur yet.
-- [ ] Read every new role permission, channel/category, existing public gate, public newcomer exception, and selected team ID in that plan.
+- [ ] Read every nonprivileged role, channel/category create, rename and move in that plan. Check the permissions shown for newly created resources.
 - [ ] Confirming without a matching same-admin preview, after ten minutes/restart, or after role/channel changes is refused.
-- [ ] Team selections are available only to the server owner, bound to exact selected Discord accounts, and do not grant Administrator. Identical display names confer no rights.
+- [ ] No staff-account selection or deletion option is offered. Existing role permissions/memberships and channel overwrites are unchanged; new selectable roles have zero permissions.
 - [ ] Confirm the reviewed plan. Check `/setup-status` for completion and missing resources. Unsupported pre-existing privileges, duplicates, public staff channels, or visibility bypasses are reported for manual review.
 - [ ] Run setup preview/confirmation twice, including after restart. Role, channel, panel IDs remain stable; no duplicate resources appear.
-- [ ] Verify every requested category/channel, including the sign-language text channel, voice rooms, AFK channel, and private staff resources. Existing unrelated resources are not deleted or renamed.
-- [ ] A new ordinary member sees welcome and rules, can invoke `/rules` and use I Agree, but cannot see gated community/staff channels.
+- [ ] Verify the six categories, thirteen text channels and three voice rooms in README. No welcome/goodbye or AFK channels are created. Existing unrelated resources are not deleted or renamed.
+- [ ] A new ordinary member can read rules and the public five-role panel. Existing verification gates remain unchanged; staff and private tickets remain hidden.
 - [ ] Pending Discord membership screening is not bypassed by an automatic newcomer role. Complete screening before verification.
 - [ ] Rules text matches the approved text exactly. Double-clicking verification safely returns success/already-verified, assigns only Verified, and removes a safe Newcomer label if present.
-- [ ] Verified users can access community channels but never staff channels. Existing unverified members must agree as well.
+- [ ] Agree still assigns Verified and unlocks any pre-existing Verified gates; new public resources stay public. Disagree is absent.
 - [ ] `/setup-roles` and `/setup-channels` have matching preview/confirmation behavior; neither pretends full service setup is finished.
-- [ ] Add a new public channel deliberately; rerun a reviewed full setup to add its verification gate.
+- [ ] Refresh rules with `/auto-rule` after simple setup and verify that no channel permission overwrites are edited.
 
 ## Welcome, announcements, and scheduling
 
-- [ ] Join and leave using a test account. Welcome includes the member mention, count, rules reference, written instructions, and accessibility text. Goodbye is sent once.
+- [ ] Join and leave using a test account. Automatic welcome/goodbye messages remain disabled after setup and no destination is created.
 - [ ] Duplicate gateway events do not create duplicate messages. A stopped process does not claim it observed joins/leaves while offline.
-- [ ] `/welcome-config enabled:false` disables both messages; re-enable and review visibility before choosing another welcome channel.
+- [ ] If explicitly testing the legacy `/welcome-config`, choose an already existing public channel manually. No channel should be created by the command; disable it afterward.
 - [ ] Staff `/announce` supports title, description, HTTPS image, and optional link. Ordinary members are refused.
 - [ ] Content containing `@everyone`/role mentions does not mass ping. Only the intended welcome member mention is allowed.
 - [ ] Schedule a near-future announcement with an explicit timezone. List and cancel another pending job. Invalid/missing timezones and invalid dates are refused.

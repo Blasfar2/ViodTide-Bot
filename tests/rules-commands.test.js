@@ -73,7 +73,7 @@ test('approved rules retain every character and fit Discord embed limits', () =>
   }
 });
 
-test('verification panel has one stable success button and ordinary rules reads have none', () => {
+test('verification panel has only Agree and ordinary rules reads have no buttons', () => {
   const payload = rulesPayload({ verification: true });
   assert.equal(payload.components.length, 1);
   const row = payload.components[0].toJSON();
@@ -178,6 +178,24 @@ test('verification outside the configured guild never reaches the service', asyn
     assert.equal(request.calls[0][1].flags, MessageFlags.Ephemeral);
     assert.match(request.calls[0][1].content, /different server/);
   }
+});
+
+test('retired Disagree buttons receive private guidance without verification or role changes', async () => {
+  const request = interaction({ isButton: () => true, isChatInputCommand: () => false, customId: 'voidtide:rules:disagree:v1' });
+  await handleInteraction(request, {
+    commands: new Map(), guildId: 'guild', logger: { error: () => assert.fail('unexpected error') },
+    rulesService: {
+      verify() { assert.fail('Disagree must not verify'); },
+    },
+    management: { afterVerify() { assert.fail('Disagree must not clean up newcomer roles'); } },
+  });
+  assert.equal(request.calls[0][0], 'reply');
+  assert.equal(request.calls[0][1].flags, MessageFlags.Ephemeral);
+  assert.match(request.calls[0][1].content, /Disagree was removed/);
+  const foreign = interaction({ isButton: () => true, isChatInputCommand: () => false, customId: 'voidtide:rules:disagree:v1', guildId: 'another-guild' });
+  await handleInteraction(foreign, { commands: new Map(), guildId: 'guild', logger: { error: () => assert.fail('unexpected error') },
+    rulesService: { disagree() { assert.fail('Foreign guild must not reach rules service'); } } });
+  assert.equal(foreign.calls[0][1].flags, MessageFlags.Ephemeral);
 });
 
 test('safe RulesError guidance is returned while arbitrary error text stays private', async () => {

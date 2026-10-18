@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionFlagsBits as P } from 'discord.js';
-import { STAFF_ROLES } from '../config/server-layout.js';
+import { staffRoleIds } from '../config/server-layout.js';
 import { configFor, embed, sendOnce, textChannel, UserError, verified } from './management-utils.js';
 
 export const TICKET_TYPES = ['General Help', 'Report Member', 'Technical Help', 'Partnership'];
@@ -24,8 +24,9 @@ export class TicketService {
       let ticket = id && this.store.get(interaction.guildId, 'tickets', id);
       const recent = this.store.list(interaction.guildId, 'tickets').filter(({ value }) => value.ownerId === interaction.user.id && Date.now() - value.createdAt < 3600_000);
       if (!ticket && recent.length >= 3) throw new UserError('Ticket creation is limited to three tickets per hour. Contact staff if needed.');
-      const staffIds = STAFF_ROLES.map((name) => config.roles?.[name]).filter(Boolean);
-      if (!config.categories?.SUPPORT || staffIds.length !== 3) throw new UserError('Ask an administrator to run /setup-server first.');
+      const roles = await interaction.guild.roles.fetch();
+      const staffIds = staffRoleIds(roles, interaction.guildId);
+      if (!config.categories?.SUPPORT || !config.roles?.Verified) throw new UserError('Ask an administrator to run /setup-server first.');
       if (!ticket) {
         id = randomUUID(); ticket = { id, ownerId: interaction.user.id, type, status: 'creating', createdAt: Date.now() };
         this.store.transaction(() => {
@@ -50,7 +51,7 @@ export class TicketService {
       let channel = savedChannel ?? matches[0];
       if (channel) {
         const roles = await interaction.guild.roles.fetch();
-        if (channel.type !== ChannelType.GuildText || channel.parentId !== config.categories.SUPPORT
+        if (channel.type !== ChannelType.GuildText
           || channel.permissionsFor(interaction.guild.roles.everyone).has(P.ViewChannel)
           || channel.permissionsFor(roles.get(config.roles.Verified)).has(P.ViewChannel)) throw new UserError('Recovered ticket permissions are unsafe. An administrator must review them.');
         for (const overwrite of channel.permissionOverwrites.cache.values()) {
@@ -83,8 +84,7 @@ export class TicketService {
         : this.store.list(interaction.guildId, 'tickets').find(({ value }) => value.channelId === interaction.channelId);
       const ticket = entry?.value;
       if (!ticket || ticket.channelId !== interaction.channelId) throw new UserError('Run this inside the ticket you want to close.');
-      const config = configFor(this.store, interaction.guildId);
-      const staff = interaction.memberPermissions?.has(P.ManageMessages) || STAFF_ROLES.some((name) => interaction.member?.roles.cache.has(config.roles?.[name]));
+      const staff = [P.ManageMessages, P.ModerateMembers, P.ManageChannels, P.ManageRoles].some((permission) => interaction.memberPermissions?.has(permission));
       if (ticket.ownerId !== interaction.user.id && !staff) throw new UserError('Only the requester or authorized staff can close this ticket.');
       if (ticket.status === 'closed') return { content: 'This ticket is already archived.' };
       const channel = await textChannel(interaction.guild, ticket.channelId);
