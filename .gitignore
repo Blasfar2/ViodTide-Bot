@@ -1,0 +1,15 @@
+node_modules/
+
+# Local credentials and environment overrides
+.env
+.env.*
+!.env.example
+
+# Generated logs and coverage
+*.log
+npm-debug.log*
+coverage/
+
+# Operating-system metadata
+.DS_Store
+Thumbs.db
