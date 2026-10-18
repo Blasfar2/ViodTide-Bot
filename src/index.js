@@ -29,7 +29,7 @@ try {
   if (error instanceof ConfigError) {
     logger.error(error.message);
   } else {
-    logger.error('Bot startup failed. Check the reset token, bot installation, and network access.', error);
+    logger.error('Bot startup failed. Check configuration, writable data storage, bot permissions, and network access.', error);
   }
   shutdown(1);
 }

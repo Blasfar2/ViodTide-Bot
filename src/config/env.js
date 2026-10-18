@@ -12,6 +12,9 @@ export class ConfigError extends Error {
 
 /** Validate names without ever including configuration values in errors. */
 export function readConfig(environment = process.env) {
+  if (environment.ENABLE_COMMUNITY !== undefined && !['true', 'false', ''].includes(environment.ENABLE_COMMUNITY)) {
+    throw new ConfigError('ENABLE_COMMUNITY must be true or false.');
+  }
   const missing = variableNames.filter((name) => !environment[name]?.trim());
   if (missing.length > 0) {
     throw new ConfigError(`Missing required environment variables: ${missing.join(', ')}. See .env.example.`);

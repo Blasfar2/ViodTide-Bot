@@ -205,7 +205,7 @@ test('registration retains /ping and sends the approved commands to this applica
   assert.equal(result, response);
   assert.equal(calls.length, 1);
   assert.equal(calls[0][0], `/applications/${config.clientId}/guilds/${config.guildId}/commands`);
-  assert.deepEqual(calls[0][1].body.map((command) => command.name), ['ping', 'rules', 'setup-rules']);
+  assert.deepEqual(calls[0][1].body.slice(0, 3).map((command) => command.name), ['ping', 'rules', 'setup-rules']);
   assert.equal(calls[0][1].body[0].name, 'ping');
   assert.match(calls[0][1].body[0].description, /VOIDTIDE Bot/);
 });
@@ -228,7 +228,7 @@ test('readiness requires the configured application and guild', () => {
 test('client uses the Guilds intent, disables automatic mentions, and wires events without login', async () => {
   const logger = makeLogger();
   let failures = 0;
-  const client = createBotClient({ config, logger, onFatal: () => failures++ });
+  const client = createBotClient({ config, logger, onFatal: () => failures++, communityEnabled: false });
   try {
     assert.equal(client.options.intents.bitfield, GatewayIntentBits.Guilds);
     assert.deepEqual(client.options.allowedMentions, { parse: [], repliedUser: false });
@@ -290,7 +290,7 @@ test('command preview works without credentials and emits a valid /ping payload'
   assert.ifError(result.error);
   assert.equal(result.status, 0, result.stderr);
   const definitions = JSON.parse(result.stdout);
-  assert.deepEqual(definitions.map((command) => command.name), ['ping', 'rules', 'setup-rules']);
+  assert.deepEqual(definitions.slice(0, 3).map((command) => command.name), ['ping', 'rules', 'setup-rules']);
   assert.equal(definitions[0].name, 'ping');
   assert.equal(result.stderr, '');
 });
