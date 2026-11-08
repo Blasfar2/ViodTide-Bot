@@ -63,7 +63,9 @@ export async function sendOnce(store, channel, key, payload, { edit = false } = 
       try { message = await channel.messages.fetch({ message: saved.messageId, force: true }); }
       catch (error) { if (error.code !== 10008) throw error; }
     }
-    if (!message && (saved || key.startsWith('panel:'))) {
+    // A scheduled REST worker can announce a stream while this process/SQLite is offline.
+    // Use the same bot-owned footer marker to adopt that existing message on restart.
+    if (!message && (saved || key.startsWith('panel:') || key.startsWith('stream:'))) {
       let before;
       for (;;) {
         const page = await channel.messages.fetch({ limit: 100, ...(before ? { before } : {}) });

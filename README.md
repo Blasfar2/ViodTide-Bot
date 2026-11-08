@@ -146,6 +146,8 @@ The legacy `/welcome-config` command remains available only for an explicit admi
 
 ## Twitch and YouTube
 
+**Twitch alerts while your PC/Codespace is off:** the optional [offline Twitch workflow](docs/offline-twitch.md) checks `voidtideus` on GitHub Actions and posts as your existing bot using Discord REST. It stays disabled until explicitly configured/enabled. Standard runners are free for public repositories; the workflow skips private repositories. It checks roughly every five minutes, with possible scheduling delays. It preserves permissions and mentions only the Twitch opt-in role. See the guide for the exact secrets, variables and test steps; no slash command registration is needed.
+
 Optional credentials stay in `.env`/secure host settings:
 
 ```dotenv
