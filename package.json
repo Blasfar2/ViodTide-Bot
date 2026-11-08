@@ -13,6 +13,7 @@
     "dev": "node --watch src/index.js",
     "deploy:commands": "node scripts/deploy-commands.js",
     "commands:preview": "node scripts/deploy-commands.js --dry-run",
+    "notify:twitch": "node scripts/twitch-notify.js",
     "check": "eslint .",
     "check:config": "node scripts/check-config.js",
     "test": "node --test"
