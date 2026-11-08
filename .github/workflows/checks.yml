@@ -3,7 +3,7 @@ name: Bot checks
 on:
   pull_request:
   push:
-    branches: [main, feature/offline-twitch-alerts]
+    branches: [main, feature/offline-twitch-alerts, feature/offline-youtube-alerts]
 
 permissions:
   contents: read
@@ -34,3 +34,10 @@ jobs:
         run: npm test
       - name: Validate command definitions offline
         run: npm run commands:preview
+      - name: Verify scheduled notifiers remain disabled without opt-in
+        run: |
+          npm run notify:twitch
+          npm run notify:youtube
+        env:
+          VOIDTIDE_OFFLINE_TWITCH_ENABLED: 'false'
+          VOIDTIDE_OFFLINE_YOUTUBE_ENABLED: 'false'

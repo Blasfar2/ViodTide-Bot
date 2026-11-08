@@ -1,0 +1,44 @@
+name: YouTube upload alerts
+
+on:
+  schedule:
+    - cron: '1-56/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: voidtide-offline-youtube
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    # Explicit opt-in, public repositories only; no private-repository billed minutes.
+    if: vars.VOIDTIDE_OFFLINE_YOUTUBE_ENABLED == 'true' && github.event.repository.visibility == 'public'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Use Node.js 24 LTS
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install locked dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Share a new YouTube upload once
+        run: npm run notify:youtube
+        env:
+          VOIDTIDE_OFFLINE_YOUTUBE_ENABLED: ${{ vars.VOIDTIDE_OFFLINE_YOUTUBE_ENABLED }}
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          DISCORD_CLIENT_ID: ${{ vars.DISCORD_CLIENT_ID }}
+          DISCORD_GUILD_ID: ${{ vars.DISCORD_GUILD_ID }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          YOUTUBE_HANDLE: ${{ vars.YOUTUBE_HANDLE || '@VoidtidePASV' }}
+          YOUTUBE_DISCORD_CHANNEL_ID: ${{ vars.YOUTUBE_DISCORD_CHANNEL_ID }}
+          YOUTUBE_NOTIFICATION_ROLE_ID: ${{ vars.YOUTUBE_NOTIFICATION_ROLE_ID }}
+          YOUTUBE_ALERT_COOLDOWN_MINUTES: ${{ vars.YOUTUBE_ALERT_COOLDOWN_MINUTES || '5' }}
